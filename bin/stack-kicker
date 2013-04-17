@@ -1,24 +1,47 @@
 #!/usr/bin/env ruby
 
+require 'bundler'
 require 'optparse'
 require 'methadone'
 require 'stack-kicker'
+require 'stack'
 
 class App
   include Methadone::Main
   include Methadone::CLILogging
 
-  main do # Add args you want: |like,so|
-    # your program code here
-    # You can access CLI options via
-    # the options Hash
+  main do |task|
+    debug { "#{options}" }
+
+    if (task != 'show-stacks')
+      config = Stack.select_stack(options[:stackfile], options['stack'])
+    end
+
+    case task
+    when 'validate'
+      Stack.validate(config)
+    when 'configure-knife'
+      Stack.generate_knife_rb(config)
+    when 'show-stacks'
+      Stack.show_stacks(options[:stackfile])
+    when 'show-stack'
+      Stack.show_stack(config)
+    when 'show-running'
+      Stack.show_running(config)
+    when 'build'
+      Stack.deploy_all(config)
+    when 'delete'
+      Stack.delete_all(config)
+    else
+      error "Sorry, #{task} hasn't been implemented yet"
+    end
   end
 
   # supplemental methods here
 
   # Declare command-line interface here
 
-  # description "one line description of your app"
+  description "create application stacks in the cloud from fundamental building blocks"
   #
   # Accept flags via:
   # on("--flag VAL","Some flag")
@@ -27,14 +50,13 @@ class App
   # Specify switches via:
   # on("--[no-]switch","Some switch")
   #
-  # Or, just call OptionParser methods on opts
-  #
-  # Require an argument
-  # arg :some_arg 
-  #
-  # # Make an argument optional
-  # arg :optional_arg, :optional
 
+  options[:stackfile] = 'Stackfile'
+  on("--stackfile Stackfile", "Specify an alternative Stackfile")
+  on("--stack mystack", "Specify the stack in Stackfile that you want to work with")
+  on("--ssh-user USER", "User to be used for SSH access")
+
+  arg :task, "task to be performed validate|configure-knife|show-stacks|show-stack|show-running|build|replace|delete|secgroup-sync|ssh"
   version Stack::Kicker::VERSION
 
   use_log_level_option
