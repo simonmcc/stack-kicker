@@ -41,7 +41,7 @@ module Stack
     # generate an array of hostnames that this stack would create
     hostnames = Stack.generate_server_names(config)
 
-    hostnames.each { |hostname| puts "  #{hostname}" }
+    hostnames.each { |hostname| Logger.info "  #{hostname}" }
   end
 
   def Stack.select_stack(stackfile = 'Stackfile', stack_name)
@@ -116,7 +116,7 @@ module Stack
     # validation.pem to to exist
     dot_chef_abs = File.absolute_path(config[:stackhome] + '/' + config[:dot_chef])
     if !File.directory?(dot_chef_abs)
-      puts "#{dot_chef_abs} doesn't exist, creating it..."
+      Logger.info "#{dot_chef_abs} doesn't exist, creating it..."
       Dir.mkdir(dot_chef_abs)
     end
     
@@ -156,7 +156,7 @@ module Stack
     # validation.pem to to exist
     dot_chef_abs = File.absolute_path(config[:stackhome] + '/' + config[:dot_chef])
     if !File.directory?(dot_chef_abs)
-      puts "#{dot_chef_abs} doesn't exist, creating it..."
+      Logger.info "#{dot_chef_abs} doesn't exist, creating it..."
       Dir.mkdir(dot_chef_abs)
     end
     
@@ -456,9 +456,9 @@ cookbook_path [ '<%=config[:stackhome]%>/cookbooks' ]
     Stack.get_all_instances(config)
 
     if (config[:all_instances][node].nil?)
-      puts "Sorry, #{node} doesn't exist or isn't running"
+      Logger.info "Sorry, #{node} doesn't exist or isn't running"
     else
-      puts "Deleting node #{node} in #{config[:all_instances][node][:region]}..."
+      Logger.info "Deleting node #{node} in #{config[:all_instances][node][:region]}..."
       os = Stack.connect(config, config[:all_instances][node][:region])
       instance = os.get_server(config[:all_instances][node][:id])
       instance.delete!
@@ -475,7 +475,7 @@ cookbook_path [ '<%=config[:stackhome]%>/cookbooks' ]
   
     # do any of the list of servers in OpenStack match one of our hostnames?
     ours.each do |node, node_details|
-        puts "Deleting #{node}"
+        Logger.info "Deleting #{node}"
         os = Stack.connect(config, config[:all_instances][node][:region])
         d = os.get_server(config[:all_instances][node][:id])
         d.delete!
@@ -551,7 +551,7 @@ cookbook_path [ '<%=config[:stackhome]%>/cookbooks' ]
 
     # run the secgroup-sync tool, across each AZ/REGION
     config[:azs].each do |az|
-      puts "Syncing security groups in #{az}"
+      Logger.info "Syncing security groups in #{az}"
       system("stackhelper --os-region-name #{az} secgroup-sync --secgroup-json secgroups.json --additional-group-json #{sg_json.path}")
     end
   end
@@ -602,7 +602,7 @@ cookbook_path [ '<%=config[:stackhome]%>/cookbooks' ]
             # knife node run_list add -d --environment $CHEF_ENVIRONMENT $SERVER_NAME "role[${ROLE}]"
             # this relies on .chef matching the stacks config (TODO: poke the Chef API directly?)
             cmd = "EDITOR=\"perl -p -i -e 's/_default/#{config[:chef_environment]}/'\" knife node create --server-url #{config[:chef_server_public]} #{hostname}"
-            puts cmd
+            Logger.debug cmd
             knife_node_create = `#{cmd}`
             Logger.info "Priming Chef Server: #{knife_node_create}"
 
@@ -625,8 +625,8 @@ cookbook_path [ '<%=config[:stackhome]%>/cookbooks' ]
           # 2) replace the tokens (CHEF_SERVER, CHEF_ENVIRONMENT, SERVER_NAME, ROLE)
           multipart.gsub!(%q!%HOSTNAME%!, hostname)
 
-          puts "Chef server is #{config[:chef_server_hostname]}, which is in #{config[:node_details][config[:chef_server_hostname]][:region]}"
-          puts "#{hostname}'s region is #{config[:node_details][hostname][:region]}"
+          Logger.info  "Chef server is #{config[:chef_server_hostname]}, which is in #{config[:node_details][config[:chef_server_hostname]][:region]}"
+          Logger.info  "#{hostname}'s region is #{config[:node_details][hostname][:region]}"
           # if this host is in the same region/az, use the private URL, if not, use the public url
           if (config[:node_details][hostname][:region] == config[:node_details][config[:chef_server_hostname]][:region]) && !config[:chef_server_private].nil?
             multipart.gsub!(%q!%CHEF_SERVER%!, config[:chef_server_private])
@@ -639,7 +639,7 @@ cookbook_path [ '<%=config[:stackhome]%>/cookbooks' ]
           if File.exists?(config[:chef_validation_pem])
             multipart.gsub!(%q!%CHEF_VALIDATION_PEM%!, File.read(config[:chef_validation_pem]))
           else
-            puts "WARNING: Skipping #{config[:chef_validation_pem]} substitution in user-data"
+            Logger.warn "Skipping #{config[:chef_validation_pem]} substitution in user-data"
           end
           multipart.gsub!(%q!%SERVER_NAME%!, hostname)
           multipart.gsub!(%q!%ROLE%!, role.to_s)
@@ -681,10 +681,10 @@ cookbook_path [ '<%=config[:stackhome]%>/cookbooks' ]
           # attach a floating IP to this if we have one
           if role_details[:floating_ips] && role_details[:floating_ips][p-1]
             floating_ip = role_details[:floating_ips][p-1]
-            puts "Attaching #{floating_ip} to  #{hostname}\n"
+            Logger.info "Attaching #{floating_ip} to  #{hostname}\n"
             # nova --os-region-name $REGION add-floating-ip $SERVER_NAME $FLOATING_IP
             floating_ip_add = `nova --os-region-name #{node_details[hostname][:az]} add-floating-ip #{hostname} #{floating_ip}`
-            puts floating_ip_add 
+            Logger.info floating_ip_add 
           end 
           
           # refresh the secgroups ASAP
@@ -699,11 +699,11 @@ cookbook_path [ '<%=config[:stackhome]%>/cookbooks' ]
             public_ip = Stack.get_public_ip(config, hostname)
             role_details[:post_install_args].sub!(%q!%PUBLIC_IP%!, public_ip)
             # we system this, as they are can give live feed back
-            puts "Executing '#{post_install_script_abs} #{role_details[:post_install_args]}' as the post_install_script"
+            Logger.info "Executing '#{post_install_script_abs} #{role_details[:post_install_args]}' as the post_install_script"
             system("cd #{role_details[:post_install_cwd]} ; #{post_install_script_abs} #{role_details[:post_install_args]}")
           end
         else
-          puts "Skipped role #{role}"
+          Logger.info "Skipped role #{role}"
         end
       end 
     end
