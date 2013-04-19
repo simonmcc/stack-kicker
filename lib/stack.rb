@@ -16,14 +16,24 @@ require 'tempfile'
 # This really needs to be converted into a class....
 # 
 module Stack
+
   # Shadow the global constant Logger with Stack::Logger 
   # (if you want access to the global constant, use ::Logger from inside the Stack module)
   Logger = Logger.new(STDOUT)
   Logger.level = ::Logger::INFO
-  Logger.level = ::Logger::DEBUG
   Logger.datetime_format = "%Y-%m-%d %H:%M:%S"
   Logger.formatter = proc do |severity, datetime, progname, msg|
       "#{datetime} #{severity}: #{msg}\n"
+  end
+
+  # location of gem, where config[:gemhome]/lib contains our default cloud-init templates
+  @@gemhome = File.absolute_path(File.realpath(File.dirname(File.expand_path(__FILE__)) + '/..'))
+
+  # Methadone::CLILogger is a Class, Stack is still a module, so we can't include it
+  # so this is a QADH to propagate the log_level
+  def Stack.log_level(level)
+    Logger.debug { "Setting the Logger.level to #{level}" }
+    Logger.level = level
   end
 
   def Stack.show_stacks(stackfile = 'Stackfile')
@@ -160,15 +170,6 @@ module Stack
       Dir.mkdir(dot_chef_abs)
     end
     
-    # Check we have a #{dot_chef_abs}/.chef/knife.rb
-    knife_rb_abs = dot_chef_abs + '/knife.rb'
-    if File.exists?(knife_rb_abs)
-      Logger.info "Found #{knife_rb_abs}, lets hope it contains something sensible"
-    else
-      Logger.error "#{knife_rb_abs} doesn't exist, please run './stack.rb configure-knife <stack-name>'"
-      exit
-    end
-    
     # populate the config & then walk through the AZs verifying the config
     Stack.populate_config(config)
 
@@ -293,6 +294,7 @@ cookbook_path [ '<%=config[:stackhome]%>/cookbooks' ]
   def Stack.populate_config(config)
     # config[:role_details] contains built out role details with defaults filled in from stack defaults
     # config[:node_details] contains node details built out from role_details 
+
     
     if config[:node_details].nil?
       Logger.debug { "Initializing config[:node_details] and config[:azs]" }
@@ -319,16 +321,16 @@ cookbook_path [ '<%=config[:stackhome]%>/cookbooks' ]
         
         # Has the cloud_config_yaml been overridden?
         if (role_details[:cloud_config_yaml])
-          role_details[:cloud_config_yaml]
+          role_details[:cloud_config_yaml] = Stack.find_file(config, role_details[:cloud_config_yaml])
         else
-          role_details[:cloud_config_yaml] = 'cloud-config.yaml'
+          role_details[:cloud_config_yaml] = Stack.find_file(config, 'cloud-config.yaml')
         end
 
         # Has the default bootstrap script been overridden
         if (role_details[:bootstrap])
-          role_details[:bootstrap]
+          role_details[:bootstrap] = Stack.find_file(config, role_details[:bootstrap])
         else
-          role_details[:bootstrap] = 'chef-client-bootstrap-excl-validation-pem.sh'
+          role_details[:bootstrap] = Stack.find_file(config, 'chef-client-bootstrap-excl-validation-pem.sh')
         end
 
         # we default to the role name for the security group unless explicitly set
@@ -495,7 +497,7 @@ cookbook_path [ '<%=config[:stackhome]%>/cookbooks' ]
   def Stack.set_chef_server(config, chef_server)
     # set the private & public URLs for the chef server, 
     # called either after we create the Chef Server, or skip over it
-    Logger.info "Setting the :chef_server_* details (using #{chef_server})"
+    Logger.debug "Setting :chef_server_hostname, chef_server_private & chef_server_public details (using #{chef_server})"
 
     config[:chef_server_hostname] = chef_server
     # get the internal IP of this instance....which we should have stored in config[:all_instances]
@@ -615,13 +617,12 @@ cookbook_path [ '<%=config[:stackhome]%>/cookbooks' ]
           # build the user-data content for this host
           # (we have a local copy of https://github.com/lovelysystems/cloud-init/blob/master/tools/write-mime-multipart)
           # 1) generate the mimi-multipart file
-          scriptdir = File.dirname(File.expand_path(__FILE__))
-          if !role_details[:bootstrap].empty?
-            bootstrap = "#{scriptdir}/#{role_details[:bootstrap]}"
-          else 
-            bootstrap = ""
-          end
-          multipart = `#{File.dirname(__FILE__)}/write-mime-multipart #{bootstrap} #{File.dirname(__FILE__)}/#{role_details[:cloud_config_yaml]}`
+          # libdir = where our shipped scripts live
+          # (use config[:stackhome] for "project" config/scripts)
+          libdir = File.realpath(@@gemhome + '/lib')
+          multipart_cmd = "#{libdir}/write-mime-multipart #{role_details[:bootstrap]} #{role_details[:cloud_config_yaml]}"
+          Logger.debug { "multipart_cmd = #{multipart_cmd}" }
+          multipart = `#{multipart_cmd}`
           # 2) replace the tokens (CHEF_SERVER, CHEF_ENVIRONMENT, SERVER_NAME, ROLE)
           multipart.gsub!(%q!%HOSTNAME%!, hostname)
 
@@ -693,14 +694,15 @@ cookbook_path [ '<%=config[:stackhome]%>/cookbooks' ]
           # run any post-install scripts, these are run from the current host, not the nodes
           if role_details[:post_install_script]
             # convert when we got passed to an absolute path
-            post_install_script_abs = File.realpath(scriptdir + '/' + role_details[:post_install_script])
+            post_install_script_abs = File.realpath(config[:stackhome] + '/' + role_details[:post_install_script])
+            post_install_cwd_abs = File.realpath(config[:stackhome] + '/' + role_details[:post_install_cwd])
             
             # replace any tokens in the argument
             public_ip = Stack.get_public_ip(config, hostname)
             role_details[:post_install_args].sub!(%q!%PUBLIC_IP%!, public_ip)
             # we system this, as they are can give live feed back
             Logger.info "Executing '#{post_install_script_abs} #{role_details[:post_install_args]}' as the post_install_script"
-            system("cd #{role_details[:post_install_cwd]} ; #{post_install_script_abs} #{role_details[:post_install_args]}")
+            system("cd #{post_install_cwd_abs} ; #{post_install_script_abs} #{role_details[:post_install_args]}")
           end
         else
           Logger.info "Skipped role #{role}"
@@ -708,5 +710,32 @@ cookbook_path [ '<%=config[:stackhome]%>/cookbooks' ]
       end 
     end
   end
+
+  def Stack.find_file(config, filename)
+    # find a file, using the standard path precedence
+    # 1) cwd
+    # 2) stackhome
+    # 3) gemhome/lib
+    dirs = [ './' ] 
+    dirs.push(config[:stackhome])
+    dirs.push(@@gemhome + '/lib')
+
+    Logger.debug "find_file, looking for #{filename} in #{dirs}"
+    filename_fqp = ''
+    dirs.each do |dir|
+      fqp = dir + '/' + filename
+      Logger.debug "find_file: checking #{fqp}"
+      if File.file?(fqp)
+      Logger.debug "find_file: found #{fqp}!"
+        filename_fqp =  File.expand_path(fqp)
+      end
+    end
+
+    if filename_fqp.empty?
+      Logger.warn "couldn't find #{filename} in #{dirs}"
+    end
+    filename_fqp
+  end
+
 end
 

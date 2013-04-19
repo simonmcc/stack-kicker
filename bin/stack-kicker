@@ -12,6 +12,8 @@ class App
 
   main do |task|
     debug { "#{options}" }
+    # pass the logger.level into the Stack module
+    Stack.log_level(logger.level)
 
     if (task != 'show-stacks')
       config = Stack.select_stack(options[:stackfile], options['stack'])
