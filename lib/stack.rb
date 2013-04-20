@@ -62,6 +62,8 @@ module Stack
   end
  
   def Stack.show_stack(config)
+    # syntax_check is a light weight check that doesn't talk to OpenStalk
+    Stack.syntax_check(config)
     # generate an array of hostnames that this stack would create
     hostnames = Stack.generate_server_names(config)
 
@@ -133,24 +135,25 @@ module Stack
       exit
     end
 
-    Logger.debug "Looking for #{config[:key_pair]}"
+    # load defaults for any items not configured
+    Stack.populate_config(config)
 
-    # check that we have semi-sensible Chef setup
-    # at a bare minimum, we need the directory where we're going to download
-    # validation.pem to to exist
-    dot_chef_abs = File.absolute_path(config[:stackhome] + '/' + config[:dot_chef])
-    if !File.directory?(dot_chef_abs)
-      Logger.info "#{dot_chef_abs} doesn't exist, creating it..."
-      Dir.mkdir(dot_chef_abs)
-    end
-    
-    # Check we have a #{dot_chef_abs}/.chef/knife.rb
-    knife_rb_abs = dot_chef_abs + '/knife.rb'
-    if File.exists?(knife_rb_abs)
-      Logger.info "Found #{knife_rb_abs}, lets hope it contains something sensible"
-    else
-      Logger.error "#{knife_rb_abs} doesn't exist, please run './stack.rb configure-knife <stack-name>'"
-      exit
+    if config[:provisioner] == 'chef'
+      # check that we have semi-sensible Chef setup
+      # at a bare minimum, we need the directory where we're going to download
+      # validation.pem to to exist
+      dot_chef_abs = File.absolute_path(config[:stackhome] + '/' + config[:dot_chef])
+      if !File.directory?(dot_chef_abs)
+        Logger.warn "#{dot_chef_abs} doesn't exist"
+      end
+      
+      # Check we have a #{dot_chef_abs}/.chef/knife.rb
+      knife_rb_abs = dot_chef_abs + '/knife.rb'
+      if File.exists?(knife_rb_abs)
+        Logger.info "Found #{knife_rb_abs}, lets hope it contains something sensible"
+      else
+        Logger.warn "#{knife_rb_abs} doesn't exist, please run './stack.rb configure-knife <stack-name>'"
+      end
     end
   end
 
@@ -175,15 +178,6 @@ module Stack
       end 
     end
 
-    # check that we have semi-sensible Chef setup
-    # at a bare minimum, we need the directory where we're going to download
-    # validation.pem to to exist
-    dot_chef_abs = File.absolute_path(config[:stackhome] + '/' + config[:dot_chef])
-    if !File.directory?(dot_chef_abs)
-      Logger.info "#{dot_chef_abs} doesn't exist, creating it..."
-      Dir.mkdir(dot_chef_abs)
-    end
-    
     # populate the config & then walk through the AZs verifying the config
     Stack.populate_config(config)
 
@@ -235,7 +229,6 @@ module Stack
     # generate a project/.chef/knife.rb from our config
     # (assumes the chef server is running for public IP access etc)
 
-
     # find the chef server, if we need to
     if config[:chef_server_hostname].nil? || config[:chef_server_private].nil? || config[:chef_server_public]
       Logger.debug { "Attempting to discover the chef server details" }
@@ -250,6 +243,11 @@ module Stack
 
     # CWD shoud be chef-repo/bootstrap, so the project .chef directory should be
     dot_chef_abs = File.absolute_path(config[:stackhome] + '/' + config[:dot_chef])
+
+    if !File.directory?(dot_chef_abs)
+      Logger.warn "#{dot_chef_abs} doesn't exist, creating it..."
+      Dir.mkdir(dot_chef_abs)
+    end
 
     client_key = dot_chef_abs + '/' + config[:name] + '-' + ENV['USER'] + '.pem'
     validation_key = dot_chef_abs + '/' + config[:name] + '-' + 'validation.pem'
@@ -287,14 +285,14 @@ cookbook_path [ '<%=config[:stackhome]%>/cookbooks' ]
 
     # TODO: don't calculate this everytime, shift out to a hash lookup
     Logger.debug config
-    Logger.debug config['site_template']
+    Logger.debug config[:site_template]
     Logger.debug role_details
     Logger.debug role_details[:azs]
 
-    site = sprintf(config['site_template'], role_details[:azs][position-1].split('.')[0].sub(/-/, ''))
+    site = sprintf(config[:site_template], role_details[:azs][position-1].split('.')[0].sub(/-/, ''))
     
     # generate the hostname
-    hostname = sprintf(config['name_template'], config['global_service_name'], site, role, position)
+    hostname = sprintf(config[:name_template], config[:global_service_name], site, role, position)
 
     hostname 
   end
@@ -309,17 +307,47 @@ cookbook_path [ '<%=config[:stackhome]%>/cookbooks' ]
     # config[:role_details] contains built out role details with defaults filled in from stack defaults
     # config[:node_details] contains node details built out from role_details 
 
+    # set some sensible defaults to the stack-wide defaults if they haven't been set in the Stackfile.
+    if config[:provisioner].nil?
+      Logger.warn { "Defaulting to chef for config[:provisioner] "}
+      config[:provisioner] = 'chef'
+    end
+
+    if config[:dot_chef].nil?
+      Logger.warn { "Defaulting to .chef for config[:dot_chef] "}
+      config[:dot_chef] = '.chef'
+    end
+
+    if config[:chef_environment].nil?
+      Logger.warn { "Defaulting to _default for config[:chef_environment]" }
+      config[:chef_environment] = '_default'
+    end
+
+    if config[:chef_validation_pem].nil?
+      Logger.warn { "Defaulting to .chef/validation.pem for config[:chef_validation_pem]" }
+      config[:chef_validation_pem] = '.chef/validation.pem'
+    end
+
+    if config[:name_template].nil?
+      Logger.warn { "Defaulting to '%s-%s-%s%04d' for config[:name_template]" }
+      config[:name_template] = '%s-%s-%s%04d' 
+    end
+
+    if config[:site_template].nil?
+      Logger.warn { "Defaulting to '%s' for config[:site_template]" }
+      config[:site_template] = '%s'
+    end
+
+    if config[:global_service_name].nil?
+      Logger.error { "Defaulting to 'UNKNOWN' for config[:global_service_name]" }
+      config[:site_template] = 'UNKNOWN'
+    end
+
     
     if config[:node_details].nil?
       Logger.debug { "Initializing config[:node_details] and config[:azs]" }
       config[:node_details] = Hash.new
       config[:azs] = Array.new
-
-      # apply global defaults if not already set
-      if config['site_template'].nil?
-        Logger.error { "config['site_template'] isn't set, please update your config" }        
-        config['site_template'] =  'UNKNOWN%s'
-      end
 
       config[:roles].each do |role,role_details| 
         Logger.debug { "Setting defaults for #{role}" }
@@ -342,7 +370,11 @@ cookbook_path [ '<%=config[:stackhome]%>/cookbooks' ]
 
         # Has the default bootstrap script been overridden
         if (role_details[:bootstrap])
-          role_details[:bootstrap] = Stack.find_file(config, role_details[:bootstrap])
+          if (role_details[:bootstrap].empty?)
+            Logger.debug { "role_details[:bootstrap] is empty, ignoring" }
+          else
+            role_details[:bootstrap] = Stack.find_file(config, role_details[:bootstrap])
+          end
         else
           role_details[:bootstrap] = Stack.find_file(config, 'chef-client-bootstrap-excl-validation-pem.sh')
         end
