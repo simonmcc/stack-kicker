@@ -1,0 +1,41 @@
+module StackConfig
+    Stacks = {
+    'web-w-chef-server' => {
+      # (we can access environment variable via ENV['foo'] instead of hard coding u/p here)
+      'REGION'      => ENV['OS_REGION_NAME'],
+      'USERNAME'    => ENV['OS_USERNAME'],
+      'PASSWORD'    => ENV['OS_PASSWORD'],
+      'AUTH_URL'    => ENV['OS_AUTH_URL'],
+      'TENANT_NAME' => ENV['OS_TENANT_NAME'],
+
+       # generic instance info
+       'flavor_id'  => 103,
+       'image_id'   => 75845,
+       :key_pair => 'ssh-keypair-name',
+       :key_public => '/path/to/id_rsa.pub',
+       :global_service_name => 'perconaconf',
+       
+       # role details
+       :roles => {
+         # override the default cloud-init script & default bootstrap (which is a chef-client bootstrap)
+         :chef => {
+            # we are the chef server, so skip the chef-client steps
+           :chef_server => true,        :skip_chef_prereg => true,
+           # override the default cloud-config with a chef-server template
+           :cloud_config_yaml => 'chef-cloud-config.yaml',
+           # skip the default chef-client bootstrap
+           :bootstrap => '',                                 
+           # wait for the chef server to come up & download pem files & generate client account
+           :post_install_script => 'bootstrap/chef-post-install.sh',
+            # our post install script dumps out .pem files in the CWD   
+           :post_install_cwd => '.chef',                    
+           # The post-install script needs to know the public IP of the just built instance so that this station can access it
+           :post_install_args => '%PUBLIC_IP%'               
+         },
+         # much simpler role, just build 3 of these, chef-client will do the rest on boot
+         :web => {  :count => 3 }
+       }
+    }
+    }
+end
+
