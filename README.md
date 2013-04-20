@@ -128,6 +128,15 @@ In addition to the the ruby dependencies which gem will install for you, access 
     task
         task to be performed validate|configure-knife|show-stacks|show-stack|show-running|build|replace|delete|secgroup-sync|ssh
 
+## TODO
+
+1. Clean up provider logic
+2. Remove dependency on python-novaclient for floating-ip attach
+3. Remove dependency on a full chef gem install
+4. Better docs & examples
+5. Support for AWS EC2 (from aws-kicker)
+5. Support for DNS Updates on instance creation (from aws-kicker)
+6. 
 ## Contributing
 
 1. Fork it
