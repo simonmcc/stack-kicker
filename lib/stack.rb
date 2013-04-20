@@ -152,7 +152,7 @@ module Stack
       if File.exists?(knife_rb_abs)
         Logger.info "Found #{knife_rb_abs}, lets hope it contains something sensible"
       else
-        Logger.warn "#{knife_rb_abs} doesn't exist, please run './stack.rb configure-knife <stack-name>'"
+        Logger.warn "#{knife_rb_abs} doesn't exist, please run 'stack-kicker configure-knife <stack-name>'"
       end
     end
   end
