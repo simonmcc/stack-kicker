@@ -78,7 +78,7 @@ module Stack
     # if there is only one stack defined in the Stackfile, load it:
     if StackConfig::Stacks.count == 1 && stack_name.nil? 
       stack_name = StackConfig::Stacks.keys[0]
-      Logger.debug { "defaulting to #{stack_name} as there is a single stack defined and no stack named" }
+      Logger.info { "Defaulting to #{stack_name} as there is a single stack defined and no stack named" }
     end
 
     # returns a config object, injecting the name into the returned config
