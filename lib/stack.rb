@@ -384,6 +384,11 @@ cookbook_path [ '<%=config[:stackhome]%>/cookbooks' ]
           role_details[:security_group] = role.to_s
         end
 
+        # default to execing post install scripts in stackhome is a cwd wasn't set
+        if role_details[:post_install_cwd].nil?
+          role_details[:post_install_cwd] = config[:stackhome]
+        end
+
         (1..role_details[:count]).each do |p|
           Logger.debug { "Populating the config[:role_details][:azs] array with AZ" }
           role_details[:azs] = Array.new if role_details[:azs].nil?
@@ -733,7 +738,7 @@ cookbook_path [ '<%=config[:stackhome]%>/cookbooks' ]
           # attach a floating IP to this if we have one
           if role_details[:floating_ips] && role_details[:floating_ips][p-1]
             floating_ip = role_details[:floating_ips][p-1]
-            Logger.info "Attaching #{floating_ip} to  #{hostname}\n"
+            Logger.info "Attaching #{floating_ip} to  #{hostname}\n via 'nova add-floating-ip'"
             # nova --os-region-name $REGION add-floating-ip $SERVER_NAME $FLOATING_IP
             floating_ip_add = `nova --os-region-name #{node_details[hostname][:az]} add-floating-ip #{hostname} #{floating_ip}`
             Logger.info floating_ip_add 
@@ -744,6 +749,7 @@ cookbook_path [ '<%=config[:stackhome]%>/cookbooks' ]
 
           # run any post-install scripts, these are run from the current host, not the nodes
           if role_details[:post_install_script]
+            Logger.debug { "This role has a post-install script (#{role_details[:post_install_script]}, preparing to run" }
             # convert when we got passed to an absolute path
             post_install_script_abs = File.realpath(config[:stackhome] + '/' + role_details[:post_install_script])
             post_install_cwd_abs = File.realpath(config[:stackhome] + '/' + role_details[:post_install_cwd])
@@ -751,8 +757,9 @@ cookbook_path [ '<%=config[:stackhome]%>/cookbooks' ]
             # replace any tokens in the argument
             public_ip = Stack.get_public_ip(config, hostname)
             role_details[:post_install_args].sub!(%q!%PUBLIC_IP%!, public_ip)
-            # we system this, as they are can give live feed back
-            Logger.info "Executing '#{post_install_script_abs} #{role_details[:post_install_args]}' as the post_install_script"
+
+            # we system this, so that the script can give live feed back
+            Logger.info "Executing '#{post_install_script_abs} #{role_details[:post_install_args]}' in #{post_install_cwd_abs} as the post_install_script"
             system("cd #{post_install_cwd_abs} ; #{post_install_script_abs} #{role_details[:post_install_args]}")
           end
         else
