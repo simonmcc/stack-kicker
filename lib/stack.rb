@@ -103,7 +103,7 @@ module Stack
     # region & az concepts are confused in HPCS land
     region = config['REGION'] if (region.nil? || region.length() < 1)
 
-    Logger.info "Connecting to OpenStack with region = #{region}"
+    Logger.debug "Connecting to OpenStack with region = #{region}"
 
     OpenStack::Connection.create({
                                   :auth_method=> 'password',
@@ -597,10 +597,15 @@ cookbook_path [ '<%=config[:stackhome]%>/cookbooks' ]
     sg_json.write(secgroup_ips.to_json)
     sg_json.close
 
-    # run the secgroup-sync tool, across each AZ/REGION
-    config[:azs].each do |az|
-      Logger.info "Syncing security groups in #{az}"
-      system("stackhelper --os-region-name #{az} secgroup-sync --secgroup-json secgroups.json --additional-group-json #{sg_json.path}")
+    if File.exists?('secgroups.json')
+      Logger.info "Found secgroups.json, syncing secgroups across AZ"
+      # run the secgroup-sync tool, across each AZ/REGION
+      config[:azs].each do |az|
+        Logger.info "Syncing security groups in #{az}"
+        system("stackhelper --os-region-name #{az} secgroup-sync --secgroup-json secgroups.json --additional-group-json #{sg_json.path}")
+      end
+    else
+      Logger.info "No secgroups.json found, skipping secgroup sync"
     end
   end
 
