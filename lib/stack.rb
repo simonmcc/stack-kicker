@@ -385,8 +385,9 @@ cookbook_path [ '<%=config[:stackhome]%>/cookbooks' ]
         end
 
         # default to execing post install scripts in stackhome is a cwd wasn't set
+        # (cwd is calculated relative to stackhome)
         if role_details[:post_install_cwd].nil?
-          role_details[:post_install_cwd] = config[:stackhome]
+          role_details[:post_install_cwd] = '/.'
         end
 
         (1..role_details[:count]).each do |p|
@@ -749,7 +750,7 @@ cookbook_path [ '<%=config[:stackhome]%>/cookbooks' ]
 
           # run any post-install scripts, these are run from the current host, not the nodes
           if role_details[:post_install_script]
-            Logger.debug { "This role has a post-install script (#{role_details[:post_install_script]}, preparing to run" }
+            Logger.debug { "This role has a post-install script (#{role_details[:post_install_script]}), preparing to run" }
             # convert when we got passed to an absolute path
             post_install_script_abs = File.realpath(config[:stackhome] + '/' + role_details[:post_install_script])
             post_install_cwd_abs = File.realpath(config[:stackhome] + '/' + role_details[:post_install_cwd])
