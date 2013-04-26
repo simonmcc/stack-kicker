@@ -390,6 +390,10 @@ cookbook_path [ '<%=config[:stackhome]%>/cookbooks' ]
           role_details[:post_install_cwd] = '/.'
         end
 
+        if role_details[:post_install_args].nil?
+          role_details[:post_install_args] = ''
+        end
+
         (1..role_details[:count]).each do |p|
           Logger.debug { "Populating the config[:role_details][:azs] array with AZ" }
           role_details[:azs] = Array.new if role_details[:azs].nil?
