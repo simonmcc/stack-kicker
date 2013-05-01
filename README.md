@@ -188,13 +188,14 @@ In addition to the the ruby dependencies which gem will install for you, access 
 
 ## TODO
 
-1. Clean up provider logic
+1. Clean/Add up provider logic
 2. Remove dependency on python-novaclient for floating-ip attach
 3. Remove dependency on a full chef gem install
 4. Better docs & examples
 5. Support for AWS EC2 (from aws-kicker)
 5. Support for DNS Updates on instance creation (from aws-kicker)
-6. 
+
+
 ## Contributing
 
 1. Fork it
