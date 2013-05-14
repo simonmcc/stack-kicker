@@ -16,8 +16,8 @@ module StackConfig
        'az-2.region-a.geo-1' => { 'image_id' => 67074 },
 
        # provisioning info
-       :key_pair => 'dnsaas-dev@hp.com',
-       :key_public => '../credentials/ssh-keys/dnsaas-dev@hp.com.pub',
+       :key_pair => 'YOURKEYPAIRNAME',
+       :key_public => '/path/to/your/public-key.pub',
 
        :name_template => '%s-%s-%s%04d',   # service-site-role0001
        :global_service_name => 'webci',
