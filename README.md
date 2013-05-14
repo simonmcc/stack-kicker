@@ -4,11 +4,7 @@ stack-kicker is a simple 'application stack' deployment tool, it's purpose in li
 is to spin up a set of instances in a repeatable, controlled fashion, and optionally 
 run post-install scripts after each instance has been started.
 
-stack-kicker has hooks to allow default & custom cloud-init templates to be built & passed to
-your compute provider (we currently use ruby-openstack, so are limited to OpenStack providers, 
-however, a sister project, aws-kicker, uses fog.io, the interaction with the compute provider is
-minimal, so it's on the roadmap to merge aws-kicker & stack-kicker, and use either an internal
-abstraction layer or just fog.io for all compute provisioning requests)
+stack-kicker has hooks to allow default & custom cloud-init templates to be built & passed to your compute provider (we currently use ruby-openstack, so are limited to OpenStack providers, however, a sister project, aws-kicker, uses fog.io, the interaction with the compute provider is minimal, so it's on the roadmap to merge aws-kicker & stack-kicker, and use either an internal abstraction layer or just fog.io for all compute provisioning requests)
 
 ## Stackfile
 Normally, stack configurations are stored in a Stackfile, which is a ruby hash of configuration options.
@@ -24,9 +20,9 @@ stack-kicker sequentially iterates over defined roles, creating the required num
 Hostnames are generated from a customizable template, which is effectively:
 
 	config[:name_template] = '%s-%s-%s%04d'
-	config['global_service_name'] = 'myapp'
+	config[:global_service_name] = 'myapp'
 	site = <derived from region/az, via config[:site_template]>
-	hostname = sprintf(config[:name_template], config['global_service_name'], site, role, position)
+	hostname = sprintf(config[:name_template], config[:global_service_name], site, role, position)
 
 So hostnames will be myapp-az1-chef0001, myapp-az1-web0001, myapp-az1-web0002 etc. 
 
@@ -136,7 +132,7 @@ In addition to the the ruby dependencies which gem will install for you, access 
 4. Better docs & examples
 5. Support for AWS EC2 (from aws-kicker)
 5. Support for DNS Updates on instance creation (from aws-kicker)
-6. 
+
 ## Contributing
 
 1. Fork it
