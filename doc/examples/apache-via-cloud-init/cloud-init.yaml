@@ -1,0 +1,28 @@
+#cloud-config
+
+output:
+  all: ">> /var/log/cloud-init.log"
+
+# use the HPCS Ubuntu Mirror for security-updates too
+bootcmd:
+  - echo 127.0.1.1 %HOSTNAME% >> /etc/hosts
+  - echo # force security.ubuntu.com to mirror.clouds.archive.ubuntu.com >> /etc/hosts
+  - echo 15.185.107.200 security.ubuntu.com >> /etc/hosts
+
+# use the HPCS Ubuntu Mirrors
+apt_mirror: http://nova.clouds.archive.ubuntu.com/ubuntu
+
+# Run apt-get update
+package_update: true
+
+# Run apt-get update
+package_upgrade: true
+
+# Install some packages
+packages:
+ - apache2
+ - php5
+
+# Use `sudo -i` to simulate a login shell...
+runcmd:
+ - sudo -i touch /var/log/cloud-init.complete
