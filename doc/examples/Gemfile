@@ -1,4 +1,4 @@
 source 'https://rubygems.org'
 # source 'http://15.185.118.80/partial-gem-mirror/'
 
-gem 'stack-kicker', '>=0.0.10'
+gem 'stack-kicker', '>=0.0.11'
