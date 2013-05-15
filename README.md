@@ -61,7 +61,7 @@ This is usually only used when :chef_server = true, it stops stack-kicker from a
 #### :security_group
 security group to be assigned to this node.  (set to default is you don't want to manage security groups for every role)
 #### :cloud_config_yaml
-defaults to a file which contains a simple template (lib/cloud-config.yaml in the github repo) that installs the http://apt.opscode.com repo & gig key, as well as installing the opscode-keyring.  Can be replaced with any filename that complies with cloud-init.
+defaults to a file which contains a simple template (lib/cloud-config.yaml in the github repo) that installs the http://apt.opscode.com repo & gpg key, as well as installing the opscode-keyring.  Can be replaced with any filename that complies with cloud-init. If the filename supplied ends in '.erb', it will be processed with ERB. See [ERB Templates](#erbtemplates) for details on available data.
 #### :bootstrap
 Optional filename, the contents of which will get combined with :cloud_config_yaml to form the cloud-init payload (using mime encoding, supported types are #include, ) with some variable substation (chef server ip, environment, validation.pem, roles)  See lib/chef-client-bootstrap-excl-validation-pem.sh as an example.
 
@@ -76,6 +76,8 @@ text/upstart-job   | #upstart-job
 text/part-handler  | #part-handler
 text/cloud-boothook | #cloud-boothook
 
+Can be replaced with any filename that complies with cloud-init. If the filename supplied ends in '.erb', it will be processed with ERB. See [ERB Templates](id:erbtemplates) for details on available data.
+
 #### :data_dir
 data_dir is a hook into the optional :cloud_config_yaml template (lib/cloud-config-w-ephemeral.yaml), which formats & mounts ephemeral0 early in the boot process, allowing it to be used during the rest of the cloud-init. ephemeral0 is mounted as /mnt & then bind mounted to #{data_dir}
 
@@ -84,6 +86,54 @@ This can be an array of strings, such that node X will be assigned :floating_ips
 
 #### :post_install_script, :post_install_args & :post_install_cwd
 These are used to construct a command to execute, which is executed locally where you executed stack-kicker.  :post_install_args can contain %PUBLIC_IP%, which will be replaced by the public IP of the just created node.  :post_install_script scripts are executed as soon the the instance returns a status='ACTIVE'.  They can be used delay the creation of further nodes of the same role (for example, when creating a rabbitmq cluster, you need to wait for the rabbitmq process to be running before creating the next member of the cluster, or when you are creating a chef-server, you need to wait for the packages to install & daemons to start before attempting to create Chef users & retrieve keys)
+
+## [ERB Templates](id:erbtemplates)
+Both the :cloud_config_yaml & :bootstrap role attributes can point to plain files, files with simple tokens (%HOSTNAME%, %CHEF_SERVER%, %CHEF_ENVIRONMENT%, %CHEF_VALIDATION_PEM%, %SERVER_NAME%, %ROLE% and %DATA_DIR%) or [Ruby ERB](http://www.ruby-doc.org/stdlib-2.0/libdoc/erb/rdoc/ERB.html) templates.
+
+There are 3 key data sets exposed to the ERB templates:
+
+* instances - subset all_instances, just the nodes referenced/managed by this Stackfile
+* all_instances - hash of all instances running in this account
+* config - config contains all the config data from the Stackfile, as well as info about running instances in the account used by the Stackfile 
+
+instances & all_instances hashes look like this:
+
+```
+{
+  "webci-az1-web0001" => {
+    :region => "az-1.region-a.geo-1", 
+    :id => 1395635, 
+    :private_ips => ["10.5.170.11"], 
+    :public_ips => ["15.185.114.181"], 
+    :az => "az-1.region-a.geo-1", 
+    :role => :web}, 
+  "webci-az1-web0002" => {
+    :region => "az-1.region-a.geo-1", 
+    :id => 1396181, 
+    :private_ips => ["10.5.172.145"], 
+    :public_ips => ["15.185.110.42"], 
+    :az => "az-1.region-a.geo-1", 
+    :role=>:web
+  }
+}
+```
+So say you wanted to drop the private IP address of webci-az1-web0001 into the hosts file of webci-az1-web0002 via cloud-init, this fragment in your :cloud_config_yaml could be used:
+
+```
+bootcmd:
+  - echo <%=instances['webci-az1-web0001'][:private_ips][0]%> webci-az1-web0001  >> /etc/hosts
+```
+
+As we're using ERB for these templates, you can use the standard Ruby iterators to work through the hash:
+
+```
+bootcmd:
+<% instances.each do |node_name, node_details| %>
+  - echo <%=node_details[:private_ips][0]%> <%=node_name%>  >> /etc/hosts
+<% end %>
+```
+
+
 
 
 ## Example workflows/models

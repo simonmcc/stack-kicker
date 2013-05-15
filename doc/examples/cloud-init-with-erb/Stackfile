@@ -1,0 +1,40 @@
+module StackConfig
+    Stacks = Hash.new
+
+    Stacks['apache-cloud-init'] = {
+      # (we can access environment variable via ENV['foo'] instead of hard coding u/p here)
+      'REGION'      => ENV['OS_REGION_NAME'],
+      'USERNAME'    => ENV['OS_USERNAME'],
+      'PASSWORD'    => ENV['OS_PASSWORD'],
+      'AUTH_URL'    => ENV['OS_AUTH_URL'],
+      'TENANT_NAME' => ENV['OS_TENANT_NAME'],
+
+       # generic instance info
+       'flavor_id'  => 103,
+       'image_id'   => 75845, # Ubuntu Precise 12.04 LTS Server 64-bit
+       # per-az image_id's
+       'az-2.region-a.geo-1' => { 'image_id' => 67074 },
+
+       # provisioning info
+       :key_pair => 'YOURKEYPAIRNAME',
+       :key_public => '/path/to/your/public-key.pub',
+
+       :name_template => '%s-%s-%s%04d',   # service-site-role0001
+       :global_service_name => 'webci',
+       :site_template => '%s',
+
+       # role specification
+       # role names & chef roles should match
+       :roles => {
+         :web => {  :count => 3,
+                    # use the default security group
+                    :security_group => 'default',
+                    # don't use chef as the second-stage provisioner
+                    :skip_chef_prereg => true,
+                    :bootstrap => 'cloud-init.sh.erb',
+                    # use the yaml template that supports configuring the ephemeral space early in the boot process
+                    :cloud_config_yaml => 'cloud-init.yaml.erb',
+         }
+       }
+    }
+end

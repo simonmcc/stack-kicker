@@ -1,0 +1,15 @@
+#!/bin/bash
+
+cat > /var/www/index.html <<HEREDOC
+<html><body><h1>Stack-Kicker was 'ere!</h1>
+<p>This file is dropped in place by a shell script passed to the host via cloud-init</p>
+<p>The web server software is running but no content has been added, yet.</p>
+<h2>instances</h2>
+<%=instances%>
+<hr>
+<h2>all_instances</h2>
+<%=all_instances%>
+<h2>config</h2>
+<%=config%>
+</body></html>
+HEREDOC

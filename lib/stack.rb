@@ -448,8 +448,60 @@ cookbook_path [ '<%=config[:stackhome]%>/cookbooks' ]
       end
       config[:all_instances] = servers
     end
+    Stack.categorise_instance_ips(config)
     config[:all_instances]
   end
+
+  # Add an instance to the :all_instances hash, instead of having to poll the whole lot again
+  def Stack.add_instance(config, hostname, region, id, addresses)
+    config[:all_instances][hostname] = { :region => region, :id => id, :addresses => addresses}
+    Stack.categorise_instance_ips(config)
+  end
+
+  def Stack.categorise_instance_ips(config)
+    Logger.debug { ">>> Stack.categorise_instance_ips" }
+    # create a private_ip & public_ip array on the server objects for easy retrieval
+    config[:all_instances].each do |hostname, instance_details|
+      Logger.debug { "Flushing categorised addresses for #{hostname}" }
+      config[:all_instances][hostname][:private_ips] = Array.new
+      config[:all_instances][hostname][:public_ips] = Array.new
+
+      Logger.debug { "Categorising addresses for #{hostname}" }
+      config[:all_instances][hostname][:addresses].each do |address|
+        case address.label
+        when 'public'
+          config[:all_instances][hostname][:public_ips] << address.address
+        when 'private'
+          config[:all_instances][hostname][:private_ips] << address.address
+        else
+          Logger.error "#{address.label} is an unhandled address type for #{hostname}"
+        end
+      end
+    end
+    Logger.debug { "config[:all_instances][= #{config[:all_instances]}" }
+    Logger.debug { "<<< Stack.categorise_instance_ips" }
+  end
+
+  def Stack.get_public_ip(config, hostname)
+    # get a public address from the instance
+    # (could be either the dynamic or one of our floating IPs
+    config[:all_instances][hostname][:addresses].each do |address|
+      if address.label == 'public'
+        return address.address
+      end
+    end
+  end
+
+  def Stack.get_private_ip(config, hostname)
+    # get the private address for an instance
+    config[:all_instances][hostname][:addresses].each do |address|
+      if address.label == 'private'
+        return address.address
+      end
+    end
+  end
+
+
 
   def Stack.show_running(config)
     # TODO: optionally show the hosts that are missing
@@ -458,11 +510,6 @@ cookbook_path [ '<%=config[:stackhome]%>/cookbooks' ]
     ours.each do |node, node_details|
       printf("%-30s %20s %8d %16s %s\n", node, node_details[:region], node_details[:id], node_details[:role], node_details[:addresses].map { |address| address.address })
     end
-  end
-
-  # Add an instance to the :all_instances hash, instead of having to poll the whole lot again
-  def Stack.add_instance(config, hostname, region, id, addresses)
-    config[:all_instances][hostname] = { :region => region, :id => id, :addresses => addresses}
   end
 
   def Stack.ssh(config, hostname = nil, user = ENV['USER'], command = nil)
@@ -486,6 +533,7 @@ cookbook_path [ '<%=config[:stackhome]%>/cookbooks' ]
 
 
   def Stack.get_our_instances(config)
+    Logger.debug { ">>> Stack.get_our_instances" }
     # build an hash of running instances that match our generated hostnames
     node_details = Stack.populate_config(config)
 
@@ -504,6 +552,8 @@ cookbook_path [ '<%=config[:stackhome]%>/cookbooks' ]
       end
     end
 
+    Logger.debug { "#{running}" }
+    Logger.debug { "<<< Stack.get_our_instances" }
     running
   end
 
@@ -537,16 +587,6 @@ cookbook_path [ '<%=config[:stackhome]%>/cookbooks' ]
         os = Stack.connect(config, config[:all_instances][node][:region])
         d = os.get_server(config[:all_instances][node][:id])
         d.delete!
-    end
-  end
-
-  def Stack.get_public_ip(config, hostname)
-    # get a public address from the instance
-    # (could be either the dynamic or one of our floating IPs
-    config[:all_instances][hostname][:addresses].each do |address|
-      if address.label == 'public'
-        return address.address
-      end
     end
   end
 
@@ -685,6 +725,7 @@ cookbook_path [ '<%=config[:stackhome]%>/cookbooks' ]
           Logger.debug { "multipart_cmd = #{multipart_cmd}" }
           multipart = `#{multipart_cmd}`
           Logger.debug { "multipart = #{multipart}" }
+
           # 2) replace the tokens (CHEF_SERVER, CHEF_ENVIRONMENT, SERVER_NAME, ROLE)
           Logger.debug { "Replacing %HOSTNAME% with #{hostname} in multipart" }
           multipart.gsub!(%q!%HOSTNAME%!, hostname)
@@ -713,6 +754,21 @@ cookbook_path [ '<%=config[:stackhome]%>/cookbooks' ]
           multipart.gsub!(%q!%SERVER_NAME%!, hostname)
           multipart.gsub!(%q!%ROLE%!, role.to_s)
           multipart.gsub!(%q!%DATA_DIR%!, role_details[:data_dir])
+
+          if role_details[:bootstrap].match('\.erb$') || role_details[:cloud_config_yaml].match('\.erb$')
+            Logger.debug { "bootstrap or cloud_config_yaml are erb files"}
+            instances = Hash.try_convert(Stack.get_our_instances(config))
+            all_instances = Hash.try_convert(Stack.get_all_instances(config))
+
+            Logger.debug { instances }
+            Logger.debug { all_instances }
+
+            multipart_template = ERB.new(multipart)
+            multipart_complete = multipart_template.result(binding)
+
+            Logger.debug { "multipart_complete after erb => #{multipart_complete} " }
+            multipart = multipart_complete
+          end
 
           Logger.info "Creating #{hostname} in #{node_details[hostname][:az]} with role #{role}"
 
