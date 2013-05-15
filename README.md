@@ -61,7 +61,7 @@ This is usually only used when :chef_server = true, it stops stack-kicker from a
 #### :security_group
 security group to be assigned to this node.  (set to default is you don't want to manage security groups for every role)
 #### :cloud_config_yaml
-defaults to a file which contains a simple template (lib/cloud-config.yaml in the github repo) that installs the http://apt.opscode.com repo & gpg key, as well as installing the opscode-keyring.  Can be replaced with any filename that complies with cloud-init. If the filename supplied ends in '.erb', it will be processed with ERB. See [ERB Templates](#erbtemplates) for details on available data.
+defaults to a file which contains a simple template (lib/cloud-config.yaml in the github repo) that installs the http://apt.opscode.com repo & gpg key, as well as installing the opscode-keyring.  Can be replaced with any filename that complies with cloud-init. If the filename supplied ends in '.erb', it will be processed with ERB. See [ERB Templates](#erb-templates) for details on available data.
 #### :bootstrap
 Optional filename, the contents of which will get combined with :cloud_config_yaml to form the cloud-init payload (using mime encoding, supported types are #include, ) with some variable substation (chef server ip, environment, validation.pem, roles)  See lib/chef-client-bootstrap-excl-validation-pem.sh as an example.
 
@@ -94,25 +94,25 @@ There are 3 key data sets exposed to the ERB templates:
 
 * instances - subset all_instances, just the nodes referenced/managed by this Stackfile
 * all_instances - hash of all instances running in this account
-* config - config contains all the config data from the Stackfile, as well as info about running instances in the account used by the Stackfile 
+* config - config contains all the config data from the Stackfile, as well as info about running instances in the account used by the Stackfile
 
 instances & all_instances hashes look like this:
 
 ```
 {
   "webci-az1-web0001" => {
-    :region => "az-1.region-a.geo-1", 
-    :id => 1395635, 
-    :private_ips => ["10.5.170.11"], 
-    :public_ips => ["15.185.114.181"], 
-    :az => "az-1.region-a.geo-1", 
-    :role => :web}, 
+    :region => "az-1.region-a.geo-1",
+    :id => 1395635,
+    :private_ips => ["10.5.170.11"],
+    :public_ips => ["15.185.114.181"],
+    :az => "az-1.region-a.geo-1",
+    :role => :web},
   "webci-az1-web0002" => {
-    :region => "az-1.region-a.geo-1", 
-    :id => 1396181, 
-    :private_ips => ["10.5.172.145"], 
-    :public_ips => ["15.185.110.42"], 
-    :az => "az-1.region-a.geo-1", 
+    :region => "az-1.region-a.geo-1",
+    :id => 1396181,
+    :private_ips => ["10.5.172.145"],
+    :public_ips => ["15.185.110.42"],
+    :az => "az-1.region-a.geo-1",
     :role=>:web
   }
 }
