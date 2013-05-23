@@ -260,10 +260,9 @@ module Stack
 log_level                :info
 log_location             STDOUT
 node_name                '<%=ENV['USER']%>'
-# use the HPCS_ENV environment name to pick the correct key
-client_key               '<%=dot_chef_abs%>/' + ENV['HPCS_ENV'] + '-' + ENV['USER'] + '.pem'
+client_key               '<%=dot_chef_abs%>/'+ ENV['USER'] + '.pem'
 validation_client_name   'chef-validator'
-validation_key           '<%=dot_chef_abs%>/' + ENV['HPCS_ENV'] + '-validation.pem'
+validation_key           '<%=dot_chef_abs%>/validation.pem'
 chef_server_url          '<%=config[:chef_server_public]%>'
 cache_type               'BasicFile'
 cache_options( :path =>  '<%=dot_chef_abs%>/checksums' )
