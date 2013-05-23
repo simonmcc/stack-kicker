@@ -241,6 +241,11 @@ In addition to the the ruby dependencies which gem will install for you, access 
 5. Support for AWS EC2 (from aws-kicker)
 5. Support for DNS Updates on instance creation (from aws-kicker)
 
+## Releasing
+
+1. gem bump
+2. gem release
+
 ## Contributing
 
 1. Fork it
