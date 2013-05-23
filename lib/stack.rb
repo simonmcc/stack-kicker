@@ -828,8 +828,8 @@ cookbook_path [ '<%=config[:stackhome]%>/cookbooks' ]
             post_install_args = role_details[:post_install_args].sub(%q!%PUBLIC_IP%!, public_ip)
 
             # we system this, so that the script can give live feed back
-            Logger.info "Executing '#{post_install_script_abs} #{post_install_args]}' in #{post_install_cwd_abs} as the post_install_script"
-            system("cd #{post_install_cwd_abs} ; #{post_install_script_abs} #{post_install_args]}")
+            Logger.info "Executing '#{post_install_script_abs} #{post_install_args}' in #{post_install_cwd_abs} as the post_install_script"
+            system("cd #{post_install_cwd_abs} ; #{post_install_script_abs} #{post_install_args}")
           end
         else
           Logger.info "Skipped role #{role}"
