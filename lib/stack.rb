@@ -482,10 +482,12 @@ cookbook_path [ '<%=config[:stackhome]%>/cookbooks' ]
   end
 
   def Stack.get_public_ip(config, hostname)
+    Logger.debug { "Stack.get_public_ip getting public IP for #{hostname}" }
     # get a public address from the instance
     # (could be either the dynamic or one of our floating IPs
     config[:all_instances][hostname][:addresses].each do |address|
       if address.label == 'public'
+        Logger.debug { "public IP for #{hostname} is #{address.address}" }
         return address.address
       end
     end
@@ -823,11 +825,11 @@ cookbook_path [ '<%=config[:stackhome]%>/cookbooks' ]
 
             # replace any tokens in the argument
             public_ip = Stack.get_public_ip(config, hostname)
-            role_details[:post_install_args].sub!(%q!%PUBLIC_IP%!, public_ip)
+            post_install_args = role_details[:post_install_args].sub(%q!%PUBLIC_IP%!, public_ip)
 
             # we system this, so that the script can give live feed back
-            Logger.info "Executing '#{post_install_script_abs} #{role_details[:post_install_args]}' in #{post_install_cwd_abs} as the post_install_script"
-            system("cd #{post_install_cwd_abs} ; #{post_install_script_abs} #{role_details[:post_install_args]}")
+            Logger.info "Executing '#{post_install_script_abs} #{post_install_args]}' in #{post_install_cwd_abs} as the post_install_script"
+            system("cd #{post_install_cwd_abs} ; #{post_install_script_abs} #{post_install_args]}")
           end
         else
           Logger.info "Skipped role #{role}"
