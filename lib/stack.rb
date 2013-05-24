@@ -201,7 +201,7 @@ module Stack
         Logger.warn "#{config[:key_pair]} isn't available, uploading the key"
 
         # upload the key
-        key =  os.create_keypair({:name=> config[:key_pair], :public_key=> File.read(config[:key_public])})
+        key =  os.create_keypair({:name=> config[:key_pair], :public_key=> File.read(File.expand_path(config[:key_public]))})
         Logger.warn "#{config[:key_pair]} fingerprint=#{key[:fingerprint]}"
       else
         Logger.info "#{config[:key_pair]} fingerprint=#{keypairs[config[:key_pair].to_sym][:fingerprint]}"
