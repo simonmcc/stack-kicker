@@ -575,6 +575,8 @@ cookbook_path [ '<%=config[:stackhome]%>/cookbooks' ]
   end
 
   def Stack.delete_all(config)
+    # check that we have OS_* vars loaded etc
+    Stack.syntax_check(config)
     # this also populates out unspecified defaults, like az
     Stack.populate_config(config)
 
