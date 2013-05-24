@@ -215,7 +215,7 @@ module Stack
       sg_names = security_groups.map { |secgroup, secgroup_details| secgroup_details[:name] }
 
       config[:roles].each do |role, role_details|
-        # is does the secgroup exist?
+        # does the secgroup exist?
         if sg_names.include?(role_details[:security_group])
           Logger.info "security group #{role_details[:security_group]} exists in #{az}"
         else
@@ -650,12 +650,16 @@ cookbook_path [ '<%=config[:stackhome]%>/cookbooks' ]
     sg_json.write(secgroup_ips.to_json)
     sg_json.close
 
-    if File.exists?('secgroups.json')
+    # should we skip deletes
+    skip_deletes = config['skip-secgroup-sync-deletes'] ? "--skip-deletes" : ""
+
+    secgroups_json_abs = Stack.find_file(config, "secgroups.json")
+    if File.exists?(secgroups_json_abs)
       Logger.info "Found secgroups.json, syncing secgroups across AZ"
       # run the secgroup-sync tool, across each AZ/REGION
       config[:azs].each do |az|
         Logger.info "Syncing security groups in #{az}"
-        system("stackhelper --os-region-name #{az} secgroup-sync --secgroup-json secgroups.json --additional-group-json #{sg_json.path}")
+        system("stackhelper --os-region-name #{az} secgroup-sync #{skip_deletes} --secgroup-json #{secgroups_json_abs} --additional-group-json #{sg_json.path}")
       end
     else
       Logger.info "No secgroups.json found, skipping secgroup sync"

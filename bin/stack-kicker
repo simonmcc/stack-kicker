@@ -28,13 +28,16 @@ class App
   include Methadone::CLILogging
 
   main do |task|
-    debug { "#{options}" }
+    debug { "options = #{options}" }
     # pass the logger.level into the Stack module
     Stack.log_level(logger.level)
 
     if (task != 'show-stacks')
       config = Stack.select_stack(options[:stackfile], options['stack'])
     end
+
+    # pass some command line options into the config
+    config['skip-secgroup-sync-deletes'] = options['skip-secgroup-sync-deletes'].nil? ? false : true
 
     case task
     when 'validate'
@@ -74,6 +77,7 @@ class App
   on("--stackfile Stackfile", "Specify an alternative Stackfile")
   on("--stack mystack", "Specify the stack in Stackfile that you want to work with")
   on("--ssh-user USER", "User to be used for SSH access")
+  on("--skip-secgroup-sync-deletes", "Skip deletes during secgroup-sync, handy for running multiple stacks in the one account with overlapping group names")
 
   arg :task, "task to be performed validate|configure-knife|show-stacks|show-stack|show-running|build|replace|delete|secgroup-sync|ssh"
   version Stack::Kicker::VERSION
