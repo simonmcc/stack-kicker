@@ -54,6 +54,8 @@ class App
       Stack.deploy_all(config)
     when 'delete'
       Stack.delete_all(config)
+    when 'secgroup-sync'
+      Stack.secgroup_sync(config)
     else
       error "Sorry, #{task} hasn't been implemented yet"
     end
