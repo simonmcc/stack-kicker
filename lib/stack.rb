@@ -30,6 +30,7 @@ require 'tempfile'
 # This really needs to be converted into a class....
 #
 module Stack
+  include Methadone::SH
 
   # Shadow the global constant Logger with Stack::Logger
   # (if you want access to the global constant, use ::Logger from inside the Stack module)
@@ -39,6 +40,7 @@ module Stack
   Logger.formatter = proc do |severity, datetime, progname, msg|
       "#{datetime} #{severity}: #{msg}\n"
   end
+  set_sh_logger(Logger)
 
   # location of gem, where config[:gemhome]/lib contains our default cloud-init templates
   @@gemhome = File.absolute_path(File.realpath(File.dirname(File.expand_path(__FILE__)) + '/..'))
@@ -142,7 +144,7 @@ module Stack
       # check that we have semi-sensible Chef setup
       # at a bare minimum, we need the directory where we're going to download
       # validation.pem to to exist
-      dot_chef_abs = File.absolute_path(config[:stackhome] + '/' + config[:dot_chef])
+      dot_chef_abs = File.absolute_path(File.join(config[:stackhome], config[:dot_chef]))
       if !File.directory?(dot_chef_abs)
         Logger.warn "#{dot_chef_abs} doesn't exist"
       end
@@ -166,7 +168,7 @@ module Stack
     # this lazily assumes that the :key_pair name matches the file the keys were loaded
     # from
     if (0 == 1)
-      ssh_keys_loaded = `ssh-add -L`
+      ssh_keys_loaded = Stack.shellout(config, "ssh-add -L")
       Logger.debug "ssh_keys_loaded: #{ssh_keys_loaded}"
       Logger.debug "Looking for #{config[:key_pair]}"
       if ssh_keys_loaded.include?(config[:key_pair])
@@ -242,15 +244,15 @@ module Stack
     end
 
     # CWD shoud be chef-repo/bootstrap, so the project .chef directory should be
-    dot_chef_abs = File.absolute_path(config[:stackhome] + '/' + config[:dot_chef])
+    dot_chef_abs = File.absolute_path(File.join(config[:stackhome],config[:dot_chef]))
 
     if !File.directory?(dot_chef_abs)
       Logger.warn "#{dot_chef_abs} doesn't exist, creating it..."
       Dir.mkdir(dot_chef_abs)
     end
 
-    client_key = dot_chef_abs + '/' + config[:name] + '-' + ENV['USER'] + '.pem'
-    validation_key = dot_chef_abs + '/' + config[:name] + '-' + 'validation.pem'
+    client_key = File.join(dot_chef_abs, config[:name] + '-' + ENV['USER'] + '.pem')
+    validation_key = File.join(dot_chef_abs, config[:name] + '-' + 'validation.pem')
 
     Logger.debug "stackhome: #{config[:stackhome]}"
     Logger.debug "Current user client key: #{client_key}"
@@ -260,9 +262,9 @@ module Stack
 log_level                :info
 log_location             STDOUT
 node_name                '<%=ENV['USER']%>'
-client_key               '<%=dot_chef_abs%>/'+ ENV['USER'] + '.pem'
+client_key               '<%=client_key%>'
 validation_client_name   'chef-validator'
-validation_key           '<%=dot_chef_abs%>/validation.pem'
+validation_key           '<%=validation_key%>'
 chef_server_url          '<%=config[:chef_server_public]%>'
 cache_type               'BasicFile'
 cache_options( :path =>  '<%=dot_chef_abs%>/checksums' )
@@ -306,6 +308,10 @@ cookbook_path [ '<%=config[:stackhome]%>/cookbooks' ]
     # config[:role_details] contains built out role details with defaults filled in from stack defaults
     # config[:node_details] contains node details built out from role_details
 
+    if config[:find_file_paths].nil?
+      config[:find_file_paths] = Array.new
+    end
+
     # set some sensible defaults to the stack-wide defaults if they haven't been set in the Stackfile.
     if config[:provisioner].nil?
       Logger.warn { "Defaulting to chef for config[:provisioner] "}
@@ -326,6 +332,7 @@ cookbook_path [ '<%=config[:stackhome]%>/cookbooks' ]
       Logger.warn { "Defaulting to .chef/validation.pem for config[:chef_validation_pem]" }
       config[:chef_validation_pem] = '.chef/validation.pem'
     end
+    config[:chef_validation_pem] = Stack.find_file(config, config[:chef_validation_pem])
 
     if config[:name_template].nil?
       Logger.warn { "Defaulting to '%s-%s-%s%04d' for config[:name_template]" }
@@ -344,10 +351,6 @@ cookbook_path [ '<%=config[:stackhome]%>/cookbooks' ]
 
     if config[:metadata].nil?
       config[:metadata] = Hash.new
-    end
-
-    if config[:find_file_paths].nil?
-      config[:find_file_paths] = Array.new
     end
 
     if config[:node_details].nil?
@@ -531,7 +534,7 @@ cookbook_path [ '<%=config[:stackhome]%>/cookbooks' ]
       servers.each do |host, details|
         public_ip = Stack.get_public_ip(config, host)
         Logger.info { "#{host} #{public_ip}" }
-        cmd_output =  `ssh -oStrictHostKeyChecking=no -l #{user} #{public_ip} "#{command}"`
+        cmd_output =  Stack.shellout(config, %Q[ssh -oStrictHostKeyChecking=no -l #{user} #{public_ip} "#{command}"])
         Logger.info { "#{host} #{public_ip} #{cmd_output}" }
       end
     else
@@ -708,11 +711,11 @@ cookbook_path [ '<%=config[:stackhome]%>/cookbooks' ]
           else
             # Prepare Chef
             # 1) delete the client if it exists
-            knife_client_list = `knife client list | grep #{hostname}`
+            knife_client_list = Stack.shellout(config, "knife client list | grep #{hostname}")
             knife_client_list.sub!(/\s/,'')
             if knife_client_list.length() > 0
               # we should delete the client to make way for this new machine
-              Logger.info `knife client delete --yes #{hostname}`
+              Stack.shellout(config, "knife client delete --yes #{hostname}")
             end
 
             # knife node create -d --environment $CHEF_ENVIRONMENT $SERVER_NAME
@@ -720,12 +723,12 @@ cookbook_path [ '<%=config[:stackhome]%>/cookbooks' ]
             # this relies on .chef matching the stacks config (TODO: poke the Chef API directly?)
             cmd = "EDITOR=\"perl -p -i -e 's/_default/#{config[:chef_environment]}/'\" knife node create --server-url #{config[:chef_server_public]} #{hostname}"
             Logger.debug cmd
-            knife_node_create = `#{cmd}`
+            knife_node_create = Stack.shellout(config, cmd)
             Logger.info "Priming Chef Server: #{knife_node_create}"
 
             cmd = "knife node run_list add -d --environment #{config[:chef_environment]} #{hostname} \"role[#{role}]\""
             Logger.info cmd
-            knife_node_run_list = `#{cmd}`
+            knife_node_run_list = Stack.shellout(config, cmd)
             Logger.info "Priming Chef Server: #{knife_node_run_list}"
           end
 
@@ -746,9 +749,14 @@ cookbook_path [ '<%=config[:stackhome]%>/cookbooks' ]
 
           if config[:chef_server_hostname].nil?
             Logger.info  "config[:chef_server_hostname] is nil, skipping chef server substitution"
+          elsif (role_details[:chef_server])
+            Logger.info  "This is the Chef Server - setting up to talk to ourselves"
+            multipart.gsub!(%q!%CHEF_SERVER%!, 'http://127.0.0.1:4000/')
+            multipart.gsub!(%q!%CHEF_ENVIRONMENT%!, config[:chef_environment])
           else
             Logger.info  "Chef server is #{config[:chef_server_hostname]}, which is in #{config[:node_details][config[:chef_server_hostname]][:region]}"
             Logger.info  "#{hostname}'s region is #{config[:node_details][hostname][:region]}"
+
             # if this host is in the same region/az, use the private URL, if not, use the public url
             if (config[:node_details][hostname][:region] == config[:node_details][config[:chef_server_hostname]][:region]) && !config[:chef_server_private].nil?
               multipart.gsub!(%q!%CHEF_SERVER%!, config[:chef_server_private])
@@ -757,7 +765,9 @@ cookbook_path [ '<%=config[:stackhome]%>/cookbooks' ]
             else
               Logger.warn { "Not setting the chef url for #{hostname} as neither chef_server_private or chef_server_public are valid yet" }
             end
+
             multipart.gsub!(%q!%CHEF_ENVIRONMENT%!, config[:chef_environment])
+
             if File.exists?(config[:chef_validation_pem])
               multipart.gsub!(%q!%CHEF_VALIDATION_PEM%!, File.read(config[:chef_validation_pem]))
             else
@@ -783,6 +793,7 @@ cookbook_path [ '<%=config[:stackhome]%>/cookbooks' ]
             Logger.debug { "multipart_complete after erb => #{multipart_complete} " }
             multipart = multipart_complete
           end
+          Logger.debug { "multipart = #{multipart}" }
 
           Logger.info "Creating #{hostname} in #{node_details[hostname][:az]} with role #{role}"
 
@@ -847,7 +858,7 @@ cookbook_path [ '<%=config[:stackhome]%>/cookbooks' ]
           if role_details[:post_install_script]
             Logger.debug { "This role has a post-install script (#{role_details[:post_install_script]}), preparing to run" }
             # convert when we got passed to an absolute path
-            post_install_script_abs = File.realpath(config[:stackhome] + '/' + role_details[:post_install_script])
+            post_install_script_abs = Stack.find_file(config, role_details[:post_install_script])
             post_install_cwd_abs = File.realpath(config[:stackhome] + '/' + role_details[:post_install_cwd])
 
             # replace any tokens in the argument
@@ -871,16 +882,22 @@ cookbook_path [ '<%=config[:stackhome]%>/cookbooks' ]
     # 2) stackhome
     # 2) stackhome + find_file_paths
     # 3) gemhome/lib
-    dirs = [ './' ]
+
+    if filename.nil? || filename.empty?
+      raise ArgumentError
+    end
+
+    dirs = [ '.' ]  # current directory
     dirs.push(config[:stackhome])
     config[:find_file_paths].each { |fp| dirs.push(File.join(config[:stackhome], fp)) }
     dirs.push(File.join(@@gemhome, 'lib'))
+    dirs.push('')   # find absolute paths
     dirs.flatten!
 
     Logger.debug "find_file, looking for #{filename} in #{dirs}"
     filename_fqp = ''
     dirs.each do |dir|
-      fqp = dir + '/' + filename
+      fqp = File.join(dir, filename)
       Logger.debug "find_file: checking #{fqp}"
       if File.file?(fqp)
       Logger.debug "find_file: found #{fqp}!"
@@ -894,5 +911,22 @@ cookbook_path [ '<%=config[:stackhome]%>/cookbooks' ]
     filename_fqp
   end
 
+  def Stack.shellout(config, command, cwd=nil)
+    # wrapper to exec things in a knife friendly way
+
+    if cwd.nil?
+      cwd = config[:stackhome]
+    end
+
+    saved_wd = Dir.getwd()
+    output = ""
+    Dir.chdir(cwd)
+    sh command do |stdout, stderr, exitstatus|
+      output = stdout
+    end
+    Dir.chdir(saved_wd)
+
+    return output
+  end
 end
 
