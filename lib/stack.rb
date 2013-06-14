@@ -342,6 +342,9 @@ cookbook_path [ '<%=config[:stackhome]%>/cookbooks' ]
       config[:site_template] = 'UNKNOWN'
     end
 
+    if config[:metadata].nil?
+      config[:metadata] = Hash.new
+    end
 
     if config[:node_details].nil?
       Logger.debug { "Initializing config[:node_details] and config[:azs]" }
@@ -779,8 +782,22 @@ cookbook_path [ '<%=config[:stackhome]%>/cookbooks' ]
 
           Logger.info "Creating #{hostname} in #{node_details[hostname][:az]} with role #{role}"
 
-          # this will get put in /meta.js
-          metadata = { 'region' => node_details[hostname][:az], 'chef_role' => role }
+          # this will get put in /meta.js - should look like this:
+          # {"region": "az-2.region-a.geo-1", "area": "aw2", "az": "az2", "continent": "dev"}
+          metadata = {
+            'region' => node_details[hostname][:az],
+            'continent' => 'unknown', # we could infer this from the region, or default to 'dev'
+            'area' => 'unknown',      # we could infer this from the region-a/region-b
+            'az' => node_details[hostname][:az].split('.')[0].sub(/-/, ''),
+            'chef_role' => role
+          }
+
+          Logger.debug "Generated metadata: #{metadata}"
+          Logger.debug "Supplied metadata: #{config[:metadata]}"
+          # merge with the supplied data, which will override our generated data
+
+          metadata.merge!(config[:metadata])
+          Logger.info "Final metadata: #{metadata}"
 
           os = Stack.connect(config, node_details[hostname][:az])
           newserver = os.create_server(:name => hostname,
