@@ -28,6 +28,12 @@ So hostnames will be myapp-az1-chef0001, myapp-az1-web0001, myapp-az1-web0002 et
 
 post-install scripts are executed from the same host as stack-kicker is being used, using the same credentials as the current user.  They are can be used to retrieve information from a freshly built node (like certificates from a chef server), so block progress until the chef-client run has completed (we use this to block percona/galera & rabbitmq cluster builds so that the first node is up & running correctly before we try and add another node to the cluster)
 
+### [Global Attributes](id:Global_attributes)
+TODO
+#### :find_file_paths
+An optional array that extends were the find_file fucntion searches for files (find file defaults to ., Stackhome & the gem lib (for shipped templates), the elements of find_file_paths are
+appended to Stackhome
+
 ### [Role Attributes](id:role_attributes)
 Roles have several attributes, which control how & how many nodes are created, and how they are created.  Below shows the default values for these attributes, which can all be overridden.
 

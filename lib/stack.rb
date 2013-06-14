@@ -346,6 +346,10 @@ cookbook_path [ '<%=config[:stackhome]%>/cookbooks' ]
       config[:metadata] = Hash.new
     end
 
+    if config[:find_file_paths].nil?
+      config[:find_file_paths] = Array.new
+    end
+
     if config[:node_details].nil?
       Logger.debug { "Initializing config[:node_details] and config[:azs]" }
       config[:node_details] = Hash.new
@@ -865,10 +869,13 @@ cookbook_path [ '<%=config[:stackhome]%>/cookbooks' ]
     # find a file, using the standard path precedence
     # 1) cwd
     # 2) stackhome
+    # 2) stackhome + find_file_paths
     # 3) gemhome/lib
     dirs = [ './' ]
     dirs.push(config[:stackhome])
-    dirs.push(@@gemhome + '/lib')
+    config[:find_file_paths].each { |fp| dirs.push(File.join(config[:stackhome], fp)) }
+    dirs.push(File.join(@@gemhome, 'lib'))
+    dirs.flatten!
 
     Logger.debug "find_file, looking for #{filename} in #{dirs}"
     filename_fqp = ''
