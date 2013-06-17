@@ -56,6 +56,12 @@ class App
       Stack.delete_all(config)
     when 'secgroup-sync'
       Stack.secgroup_sync(config)
+    when 'ssh'
+      debug { "ssh-host = #{options['ssh-host']}" }
+      debug { "ssh-user = #{options['ssh-user']}" }
+      debug { "ssh-command = #{options['ssh-command']}" }
+
+      Stack.ssh(config, options['sshhost'], options['ssh-user'], options['ssh-command'] )
     else
       error "Sorry, #{task} hasn't been implemented yet"
     end
@@ -76,9 +82,12 @@ class App
   #
 
   options[:stackfile] = 'Stackfile'
+  options['ssh-user'] = ENV['USER']
   on("--stackfile Stackfile", "Specify an alternative Stackfile")
   on("--stack mystack", "Specify the stack in Stackfile that you want to work with")
+  on("--ssh-host HOST", "Specify a single host, if none supplied, all hosts are executed against")
   on("--ssh-user USER", "User to be used for SSH access")
+  on("--ssh-command \"do/something\"", "Command to be run over ssh")
   on("--skip-secgroup-sync-deletes", "Skip deletes during secgroup-sync, handy for running multiple stacks in the one account with overlapping group names")
 
   arg :task, "task to be performed validate|configure-knife|show-stacks|show-stack|show-running|build|replace|delete|secgroup-sync|ssh"

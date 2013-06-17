@@ -64,8 +64,8 @@ module Stack
   end
 
   def Stack.show_stack(config)
-    # syntax_check is a light weight check that doesn't talk to OpenStalk
-    Stack.syntax_check(config)
+    # check_config is a light weight check that doesn't talk to OpenStalk
+    Stack.check_config(config)
     # generate an array of hostnames that this stack would create
     hostnames = Stack.generate_server_names(config)
 
@@ -130,7 +130,7 @@ module Stack
   end
 
   # check that all the required config items are set
-  def Stack.syntax_check(config)
+  def Stack.check_config(config)
     if config['REGION'].nil? || config['USERNAME'].nil? || config['PASSWORD'].nil? || config['AUTH_URL'].nil? || config['TENANT_NAME'].nil? &&
        config['REGION'].empty? || config['USERNAME'].empty? || config['PASSWORD'].empty? || config['AUTH_URL'].empty? || config['TENANT_NAME'].empty?
       Logger.error { "REGION, USERNAME, PASSWORD, AUTH_URL & TENANT_NAME must all be set" }
@@ -162,7 +162,10 @@ module Stack
   # validate that all our OpenStack creds, image_id, flavors, keys etc are valid
   def Stack.validate(config)
 
-    Stack.syntax_check(config)
+    Stack.check_config(config)
+
+    # populate the config & then walk through the AZs verifying the config
+    Stack.populate_config(config)
 
     # check that the ssh-key is loaded, otherwise most post-install scripts will fail
     # this lazily assumes that the :key_pair name matches the file the keys were loaded
@@ -179,9 +182,6 @@ module Stack
         exit 2
       end
     end
-
-    # populate the config & then walk through the AZs verifying the config
-    Stack.populate_config(config)
 
     # Check that we have valid details for each AZ
     config[:azs].each do |az|
@@ -229,7 +229,8 @@ module Stack
 
   def Stack.generate_knife_rb(config)
     # generate a project/.chef/knife.rb from our config
-    # (assumes the chef server is running for public IP access etc)
+
+    Stack.check_config(config)
 
     # find the chef server, if we need to
     if config[:chef_server_hostname].nil? || config[:chef_server_private].nil? || config[:chef_server_public]
@@ -299,7 +300,7 @@ cookbook_path [ '<%=config[:stackhome]%>/cookbooks' ]
   end
 
   def Stack.generate_server_names(config)
-    Stack.populate_config(config)
+    Stack.check_config(config)
     config[:hostnames] = config[:node_details].keys
     config[:hostnames]
   end
@@ -332,7 +333,9 @@ cookbook_path [ '<%=config[:stackhome]%>/cookbooks' ]
       Logger.warn { "Defaulting to .chef/validation.pem for config[:chef_validation_pem]" }
       config[:chef_validation_pem] = '.chef/validation.pem'
     end
-    config[:chef_validation_pem] = Stack.find_file(config, config[:chef_validation_pem])
+    chef_validation_pem_abs = Stack.find_file(config, config[:chef_validation_pem])
+    # only store the abs if we found it...
+    config[:chef_validation_pem] = chef_validation_pem_abs unless chef_validation_pem_abs.nil?
 
     if config[:name_template].nil?
       Logger.warn { "Defaulting to '%s-%s-%s%04d' for config[:name_template]" }
@@ -441,7 +444,7 @@ cookbook_path [ '<%=config[:stackhome]%>/cookbooks' ]
   def Stack.get_all_instances(config, refresh = false)
     if config[:all_instances].nil? || refresh
       # we need to get the server list for each AZ mentioned in the config[:roles][:role][:azs], this is populated by Stack.populate_config
-      Stack.populate_config(config)
+      Stack.check_config(config)
 
       # get the current list of servers from OpenStack & generate a hash, keyed on name
       servers = Hash.new
@@ -523,8 +526,15 @@ cookbook_path [ '<%=config[:stackhome]%>/cookbooks' ]
     end
   end
 
+  # ssh to a host, or all hosts
   def Stack.ssh(config, hostname = nil, user = ENV['USER'], command = nil)
-    # ssh to a host, or all hosts
+    # check that we have something to run
+    if command.nil?
+      Logger.error "No command passed to Stack.ssh!"
+    end
+
+    # sanity check our config, load defaults etc
+    Stack.check_config(config)
 
     # get all running instances
     servers = Stack.get_our_instances(config)
@@ -546,7 +556,7 @@ cookbook_path [ '<%=config[:stackhome]%>/cookbooks' ]
   def Stack.get_our_instances(config)
     Logger.debug { ">>> Stack.get_our_instances" }
     # build an hash of running instances that match our generated hostnames
-    node_details = Stack.populate_config(config)
+    Stack.check_config(config)
 
     # get all of our hostnames
     hostnames = Stack.generate_server_names(config)
@@ -559,7 +569,7 @@ cookbook_path [ '<%=config[:stackhome]%>/cookbooks' ]
     hostnames.each do |hostname|
       if (servers.include?(hostname))
         # return the instance details merged with the node_details (info like role)
-        running[hostname] = servers[hostname].merge(node_details[hostname])
+        running[hostname] = servers[hostname].merge(config[:node_details][hostname])
       end
     end
 
@@ -570,7 +580,7 @@ cookbook_path [ '<%=config[:stackhome]%>/cookbooks' ]
 
   def Stack.delete_node(config, node)
     # this also populates out unspecified defaults, like az
-    Stack.populate_config(config)
+    Stack.check_config(config)
     # get info about all instances running in our account & AZs
     Stack.get_all_instances(config)
 
@@ -585,10 +595,8 @@ cookbook_path [ '<%=config[:stackhome]%>/cookbooks' ]
   end
 
   def Stack.delete_all(config)
-    # check that we have OS_* vars loaded etc
-    Stack.syntax_check(config)
     # this also populates out unspecified defaults, like az
-    Stack.populate_config(config)
+    Stack.check_config(config)
 
     # get the list of nodes we consider 'ours', i.e. with hostnames that match
     # those generated by this stack
@@ -907,6 +915,7 @@ cookbook_path [ '<%=config[:stackhome]%>/cookbooks' ]
 
     if filename_fqp.empty?
       Logger.warn "couldn't find #{filename} in #{dirs}"
+      filename_fqp = nil
     end
     filename_fqp
   end
