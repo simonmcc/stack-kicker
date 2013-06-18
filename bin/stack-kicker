@@ -28,7 +28,17 @@ class App
   include Methadone::CLILogging
 
   main do |task|
+    # set the formatter
+    case options['log-format']
+    when :simple
+      format = Proc.new { |severity, datetime, progname, msg| "#{msg}\n" }
+    else
+      format = Proc.new { |severity, datetime, progname, msg| "#{datetime} #{severity}: #{msg}\n" }
+    end
+    Stack.log_format(format)
+
     debug { "options = #{options}" }
+
     # pass the logger.level into the Stack module
     Stack.log_level(logger.level)
 
@@ -89,6 +99,11 @@ class App
   on("--ssh-user USER", "User to be used for SSH access")
   on("--ssh-command \"do/something\"", "Command to be run over ssh")
   on("--skip-secgroup-sync-deletes", "Skip deletes during secgroup-sync, handy for running multiple stacks in the one account with overlapping group names")
+
+  options['log-format'] = :default
+  opts.on("-f", "--log-format FMT", [:default, :simple], "sets the log formatter (simple=msg, default=datetime severity msg") do |f|
+    options['log-format'] = f
+  end
 
   arg :task, "task to be performed validate|configure-knife|show-stacks|show-stack|show-running|build|replace|delete|secgroup-sync|ssh"
   version Stack::Kicker::VERSION

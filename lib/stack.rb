@@ -52,6 +52,10 @@ module Stack
     Logger.level = level
   end
 
+  def Stack.log_format(format_proc)
+    Logger.formatter = format_proc
+  end
+
   def Stack.show_stacks(stackfile = 'Stackfile')
     # our local config file
     config_raw = File.read(stackfile)
