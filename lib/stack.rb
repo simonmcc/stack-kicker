@@ -57,9 +57,11 @@ module Stack
   end
 
   def Stack.show_stacks(stackfile = 'Stackfile')
-    # our local config file
-    config_raw = File.read(stackfile)
-    eval(config_raw)
+    # evaluate our Stackfile, but only the once
+    if defined?(StackConfig::Stacks).nil?
+      config_raw = File.read(stackfile)
+      eval(config_raw)
+    end
 
     Logger.info { "Stacks:" }
     StackConfig::Stacks.each do |name, details|
@@ -77,14 +79,20 @@ module Stack
   end
 
   def Stack.select_stack(stackfile = 'Stackfile', stack_name)
-    # our local config file
-    config_raw = File.read(stackfile)
-    eval(config_raw)
+    # evaluate our Stackfile, but only the once
+    if defined?(StackConfig::Stacks).nil?
+      config_raw = File.read(stackfile)
+      eval(config_raw)
+    end
 
     # if there is only one stack defined in the Stackfile, load it:
     if StackConfig::Stacks.count == 1 && stack_name.nil?
       stack_name = StackConfig::Stacks.keys[0]
       Logger.info { "Defaulting to #{stack_name} as there is a single stack defined and no stack named" }
+    elsif stack_name.nil?
+      Logger.info { "You didn't specify a stack, and there are multiple stacks defined in #{stackfile}" }
+      Stack.show_stacks(stackfile)
+      exit
     end
 
     # returns a config object, injecting the name into the returned config
@@ -135,41 +143,47 @@ module Stack
 
   # check that all the required config items are set
   def Stack.check_config(config)
-    if config['REGION'].nil? || config['USERNAME'].nil? || config['PASSWORD'].nil? || config['AUTH_URL'].nil? || config['TENANT_NAME'].nil? &&
-       config['REGION'].empty? || config['USERNAME'].empty? || config['PASSWORD'].empty? || config['AUTH_URL'].empty? || config['TENANT_NAME'].empty?
-      Logger.error { "REGION, USERNAME, PASSWORD, AUTH_URL & TENANT_NAME must all be set" }
-      exit
-    end
-
-    # load defaults for any items not configured
-    Stack.populate_config(config)
-
-    if config[:provisioner] == 'chef'
-      # check that we have semi-sensible Chef setup
-      # at a bare minimum, we need the directory where we're going to download
-      # validation.pem to to exist
-      dot_chef_abs = File.absolute_path(File.join(config[:stackhome], config[:dot_chef]))
-      if !File.directory?(dot_chef_abs)
-        Logger.warn "#{dot_chef_abs} doesn't exist"
+    if config[:checked].nil?
+      if config['REGION'].nil? || config['USERNAME'].nil? || config['PASSWORD'].nil? || config['AUTH_URL'].nil? || config['TENANT_NAME'].nil? &&
+         config['REGION'].empty? || config['USERNAME'].empty? || config['PASSWORD'].empty? || config['AUTH_URL'].empty? || config['TENANT_NAME'].empty?
+        Logger.error { "REGION, USERNAME, PASSWORD, AUTH_URL & TENANT_NAME must all be set" }
+        exit
       end
 
-      # Check we have a #{dot_chef_abs}/.chef/knife.rb
-      knife_rb_abs = dot_chef_abs + '/knife.rb'
-      if File.exists?(knife_rb_abs)
-        Logger.info "Found #{knife_rb_abs}, lets hope it contains something sensible"
-      else
-        Logger.warn "#{knife_rb_abs} doesn't exist, please run 'stack-kicker configure-knife <stack-name>'"
+      if config[:roles].nil?
+        Logger.error { "No roles defined in #{config[:name]}, aborting." }
+        exit
+      end
+
+      # load defaults for any items not configured
+      Stack.populate_config(config)
+
+      if config[:provisioner] == 'chef'
+        # check that we have semi-sensible Chef setup
+        # at a bare minimum, we need the directory where we're going to download
+        # validation.pem to to exist
+        dot_chef_abs = File.absolute_path(File.join(config[:stackhome], config[:dot_chef]))
+        if !File.directory?(dot_chef_abs)
+          Logger.warn "#{dot_chef_abs} doesn't exist"
+        end
+
+        # Check we have a #{dot_chef_abs}/.chef/knife.rb
+        knife_rb_abs = dot_chef_abs + '/knife.rb'
+        if File.exists?(knife_rb_abs)
+          Logger.info "Found #{knife_rb_abs}, lets hope it contains something sensible"
+        else
+          Logger.warn "#{knife_rb_abs} doesn't exist, please run 'stack-kicker configure-knife <stack-name>'"
+        end
       end
     end
+    config[:checked] = true
   end
 
   # validate that all our OpenStack creds, image_id, flavors, keys etc are valid
   def Stack.validate(config)
 
+    # check & populate the config with defaults for anything not specified.
     Stack.check_config(config)
-
-    # populate the config & then walk through the AZs verifying the config
-    Stack.populate_config(config)
 
     # check that the ssh-key is loaded, otherwise most post-install scripts will fail
     # this lazily assumes that the :key_pair name matches the file the keys were loaded
@@ -313,133 +327,135 @@ cookbook_path [ '<%=config[:stackhome]%>/cookbooks' ]
     # config[:role_details] contains built out role details with defaults filled in from stack defaults
     # config[:node_details] contains node details built out from role_details
 
-    if config[:find_file_paths].nil?
-      config[:find_file_paths] = Array.new
-    end
+    if config[:populated].nil?
+      if config[:find_file_paths].nil?
+        config[:find_file_paths] = Array.new
+      end
 
-    # set some sensible defaults to the stack-wide defaults if they haven't been set in the Stackfile.
-    if config[:provisioner].nil?
-      Logger.warn { "Defaulting to chef for config[:provisioner] "}
-      config[:provisioner] = 'chef'
-    end
+      # set some sensible defaults to the stack-wide defaults if they haven't been set in the Stackfile.
+      if config[:provisioner].nil?
+        Logger.warn { "Defaulting to chef for config[:provisioner] "}
+        config[:provisioner] = 'chef'
+      end
 
-    if config[:dot_chef].nil?
-      Logger.warn { "Defaulting to .chef for config[:dot_chef] "}
-      config[:dot_chef] = '.chef'
-    end
+      if config[:dot_chef].nil?
+        Logger.warn { "Defaulting to .chef for config[:dot_chef] "}
+        config[:dot_chef] = '.chef'
+      end
 
-    if config[:chef_environment].nil?
-      Logger.warn { "Defaulting to _default for config[:chef_environment]" }
-      config[:chef_environment] = '_default'
-    end
+      if config[:chef_environment].nil?
+        Logger.warn { "Defaulting to _default for config[:chef_environment]" }
+        config[:chef_environment] = '_default'
+      end
 
-    if config[:chef_validation_pem].nil?
-      Logger.warn { "Defaulting to .chef/validation.pem for config[:chef_validation_pem]" }
-      config[:chef_validation_pem] = '.chef/validation.pem'
-    end
-    chef_validation_pem_abs = Stack.find_file(config, config[:chef_validation_pem])
-    # only store the abs if we found it...
-    config[:chef_validation_pem] = chef_validation_pem_abs unless chef_validation_pem_abs.nil?
+      if config[:chef_validation_pem].nil?
+        Logger.warn { "Defaulting to .chef/validation.pem for config[:chef_validation_pem]" }
+        config[:chef_validation_pem] = '.chef/validation.pem'
+      end
+      chef_validation_pem_abs = Stack.find_file(config, config[:chef_validation_pem])
+      # only store the abs if we found it...
+      config[:chef_validation_pem] = chef_validation_pem_abs unless chef_validation_pem_abs.nil?
 
-    if config[:name_template].nil?
-      Logger.warn { "Defaulting to '%s-%s-%s%04d' for config[:name_template]" }
-      config[:name_template] = '%s-%s-%s%04d'
-    end
+      if config[:name_template].nil?
+        Logger.warn { "Defaulting to '%s-%s-%s%04d' for config[:name_template]" }
+        config[:name_template] = '%s-%s-%s%04d'
+      end
 
-    if config[:site_template].nil?
-      Logger.warn { "Defaulting to '%s' for config[:site_template]" }
-      config[:site_template] = '%s'
-    end
+      if config[:site_template].nil?
+        Logger.warn { "Defaulting to '%s' for config[:site_template]" }
+        config[:site_template] = '%s'
+      end
 
-    if config[:global_service_name].nil?
-      Logger.error { "Defaulting to 'UNKNOWN' for config[:global_service_name]" }
-      config[:site_template] = 'UNKNOWN'
-    end
+      if config[:global_service_name].nil?
+        Logger.error { "Defaulting to 'UNKNOWN' for config[:global_service_name]" }
+        config[:site_template] = 'UNKNOWN'
+      end
 
-    if config[:metadata].nil?
-      config[:metadata] = Hash.new
-    end
+      if config[:metadata].nil?
+        config[:metadata] = Hash.new
+      end
 
-    if config[:node_details].nil?
-      Logger.debug { "Initializing config[:node_details] and config[:azs]" }
-      config[:node_details] = Hash.new
-      config[:azs] = Array.new
+      if config[:node_details].nil?
+        Logger.debug { "Initializing config[:node_details] and config[:azs]" }
+        config[:node_details] = Hash.new
+        config[:azs] = Array.new
 
-      config[:roles].each do |role,role_details|
-        Logger.debug { "Setting defaults for #{role}" }
+        config[:roles].each do |role,role_details|
+          Logger.debug { "Setting defaults for #{role}" }
 
-        # default to 1 node of this role if :count isn't set
-        if role_details[:count].nil?
-          role_details[:count] = 1
-        end
+          # default to 1 node of this role if :count isn't set
+          if role_details[:count].nil?
+            role_details[:count] = 1
+          end
 
-        if (role_details[:data_dir].nil?)
-          role_details[:data_dir] = '/dummy'
-        end
+          if (role_details[:data_dir].nil?)
+            role_details[:data_dir] = '/dummy'
+          end
 
-        # Has the cloud_config_yaml been overridden?
-        if (role_details[:cloud_config_yaml])
-          role_details[:cloud_config_yaml] = Stack.find_file(config, role_details[:cloud_config_yaml])
-        else
-          role_details[:cloud_config_yaml] = Stack.find_file(config, 'cloud-config.yaml')
-        end
-
-        # Has the default bootstrap script been overridden
-        if (role_details[:bootstrap])
-          if (role_details[:bootstrap].empty?)
-            Logger.debug { "role_details[:bootstrap] is empty, ignoring" }
+          # Has the cloud_config_yaml been overridden?
+          if (role_details[:cloud_config_yaml])
+            role_details[:cloud_config_yaml] = Stack.find_file(config, role_details[:cloud_config_yaml])
           else
-            role_details[:bootstrap] = Stack.find_file(config, role_details[:bootstrap])
-          end
-        else
-          role_details[:bootstrap] = Stack.find_file(config, 'chef-client-bootstrap-excl-validation-pem.sh')
-        end
-
-        # we default to the role name for the security group unless explicitly set
-        if role_details[:security_group].nil?
-          role_details[:security_group] = role.to_s
-        end
-
-        # default to execing post install scripts in stackhome is a cwd wasn't set
-        # (cwd is calculated relative to stackhome)
-        if role_details[:post_install_cwd].nil?
-          role_details[:post_install_cwd] = '/.'
-        end
-
-        if role_details[:post_install_args].nil?
-          role_details[:post_install_args] = ''
-        end
-
-        (1..role_details[:count]).each do |p|
-          Logger.debug { "Populating the config[:role_details][:azs] array with AZ" }
-          role_details[:azs] = Array.new if role_details[:azs].nil?
-
-          # is there an az set for this node?
-          if role_details[:azs][p-1].nil?
-            # inherit the global az
-            Logger.debug { "Inheriting the AZ for #{role} (#{config['REGION']})" }
-            role_details[:azs][p-1] = config['REGION']
+            role_details[:cloud_config_yaml] = Stack.find_file(config, 'cloud-config.yaml')
           end
 
-          # add this AZ to the AZ list, we'll dedupe later
-          config[:azs] << role_details[:azs][p-1]
+          # Has the default bootstrap script been overridden
+          if (role_details[:bootstrap])
+            if (role_details[:bootstrap].empty?)
+              Logger.debug { "role_details[:bootstrap] is empty, ignoring" }
+            else
+              role_details[:bootstrap] = Stack.find_file(config, role_details[:bootstrap])
+            end
+          else
+            role_details[:bootstrap] = Stack.find_file(config, 'chef-client-bootstrap-excl-validation-pem.sh')
+          end
 
-          hostname =  Stack.generate_hostname(config, role, p)
-          Logger.debug { "Setting node_details for #{hostname}, using element #{p}-1 from #{role_details[:azs]}" }
-          config[:node_details][hostname] = { :az => role_details[:azs][p-1], :region => role_details[:azs][p-1], :role => role }
+          # we default to the role name for the security group unless explicitly set
+          if role_details[:security_group].nil?
+            role_details[:security_group] = role.to_s
+          end
+
+          # default to execing post install scripts in stackhome is a cwd wasn't set
+          # (cwd is calculated relative to stackhome)
+          if role_details[:post_install_cwd].nil?
+            role_details[:post_install_cwd] = '/.'
+          end
+
+          if role_details[:post_install_args].nil?
+            role_details[:post_install_args] = ''
+          end
+
+          (1..role_details[:count]).each do |p|
+            Logger.debug { "Populating the config[:role_details][:azs] array with AZ" }
+            role_details[:azs] = Array.new if role_details[:azs].nil?
+
+            # is there an az set for this node?
+            if role_details[:azs][p-1].nil?
+              # inherit the global az
+              Logger.debug { "Inheriting the AZ for #{role} (#{config['REGION']})" }
+              role_details[:azs][p-1] = config['REGION']
+            end
+
+            # add this AZ to the AZ list, we'll dedupe later
+            config[:azs] << role_details[:azs][p-1]
+
+            hostname =  Stack.generate_hostname(config, role, p)
+            Logger.debug { "Setting node_details for #{hostname}, using element #{p}-1 from #{role_details[:azs]}" }
+            config[:node_details][hostname] = { :az => role_details[:azs][p-1], :region => role_details[:azs][p-1], :role => role }
+          end
         end
       end
+      config[:azs].uniq!
+
+      # if set the region specific settings from the global settings if not already specified
+      config[:azs].each do |az|
+        # we store region spefic stuff in hash
+        config[az] = Hash.new if config[az].nil?
+
+        config[az]['image_id'] = config['image_id'] if config[az]['image_id'].nil?
+      end
     end
-    config[:azs].uniq!
-
-    # if set the region specific settings from the global settings if not already specified
-    config[:azs].each do |az|
-      # we store region spefic stuff in hash
-      config[az] = Hash.new if config[az].nil?
-
-      config[az]['image_id'] = config['image_id'] if config[az]['image_id'].nil?
-    end
-
+    config[:populated] = true
     config[:node_details]
   end
 
