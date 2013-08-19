@@ -1,0 +1,24 @@
+#cloud-config
+
+manage_etc_hosts: True
+
+hostname: %HOSTNAME%
+fqdn: %HOSTNAME%.mccartney.ie
+
+output:
+  all: ">> /var/log/cloud-init.log"
+
+# use the HPCS Ubuntu Mirror for security-updates too
+#bootcmd:
+#  - echo 127.0.1.1 %HOSTNAME% >> /etc/hosts
+
+# Run apt-get update
+package_update: true
+
+# Run apt-get update
+package_upgrade: true
+
+# Install some packages
+packages:
+ - apache2
+ - php5
