@@ -867,7 +867,7 @@ cookbook_path [ '<%=config[:stackhome]%>/cookbooks' ]
           # refresh the chef_server details..we should have IPs now
           if role_details[:chef_server]
             Stack.set_chef_server(config, hostname)
-            Stack.generate_knife_rb(config)
+            #Stack.generate_knife_rb(config)
           end
 
           # attach a floating IP to this if we have one
