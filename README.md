@@ -94,7 +94,11 @@ This can be an array of strings, such that node X will be assigned :floating_ips
 These are used to construct a command to execute, which is executed locally where you executed stack-kicker.  :post_install_args can contain %PUBLIC_IP%, which will be replaced by the public IP of the just created node.  :post_install_script scripts are executed as soon the the instance returns a status='ACTIVE'.  They can be used delay the creation of further nodes of the same role (for example, when creating a rabbitmq cluster, you need to wait for the rabbitmq process to be running before creating the next member of the cluster, or when you are creating a chef-server, you need to wait for the packages to install & daemons to start before attempting to create Chef users & retrieve keys)
 
 ## [ERB Templates](id:erbtemplates)
-Both the :cloud_config_yaml & :bootstrap role attributes can point to plain files, files with simple tokens (%HOSTNAME%, %CHEF_SERVER%, %CHEF_ENVIRONMENT%, %CHEF_VALIDATION_PEM%, %SERVER_NAME%, %ROLE% and %DATA_DIR%) or [Ruby ERB](http://www.ruby-doc.org/stdlib-2.0/libdoc/erb/rdoc/ERB.html) templates.
+Both the :cloud_config_yaml & :bootstrap role attributes can point to plain files, files with simple tokens (%HOSTNAME%, %CHEF_SERVER%, %CHEF_SERVER_HOSTNAME%, %CHEF_ENVIRONMENT%, %CHEF_VALIDATION_PEM%, %SERVER_NAME%, %ROLE% and %DATA_DIR%) or [Ruby ERB](http://www.ruby-doc.org/stdlib-2.0/libdoc/erb/rdoc/ERB.html) templates.
+
+%HOSTNAME% is the short name of the instance being built
+%CHEF_SERVER% is the IP address of the Chef Server, private address if the chef server & current instance are in the same AZ, public IP if they are in different AZs
+%CHEF_SERVER_HOSTNAME% name of the chef server, Fully Qualified if config[:domain] is set
 
 There are 3 key data sets exposed to the ERB templates:
 

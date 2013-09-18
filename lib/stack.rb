@@ -248,20 +248,6 @@ module Stack
   def Stack.generate_knife_rb(config)
     # generate a project/.chef/knife.rb from our config
 
-    Stack.check_config(config)
-
-    # find the chef server, if we need to
-    if config[:chef_server_hostname].nil? || config[:chef_server_private].nil? || config[:chef_server_public]
-      Logger.debug { "Attempting to discover the chef server details" }
-      ours = Stack.get_our_instances(config)
-      ours.each do |node, node_details|
-        if node_details[:role] == :chef
-          Logger.debug { "Found the Chef server: #{node} #{node_details}" }
-          Stack.set_chef_server(config, node)
-        end
-      end
-    end
-
     # CWD shoud be chef-repo/bootstrap, so the project .chef directory should be
     dot_chef_abs = File.absolute_path(File.join(config[:stackhome],config[:dot_chef]))
 
@@ -636,23 +622,29 @@ cookbook_path [ '<%=config[:stackhome]%>/cookbooks' ]
     # called either after we create the Chef Server, or skip over it
     Logger.debug "Setting :chef_server_hostname, chef_server_private & chef_server_public details (using #{chef_server})"
 
+    Stack.check_config(config)
+    Stack.get_our_instances(config)
+
     config[:chef_server_hostname] = chef_server
+
     # get the internal IP of this instance....which we should have stored in config[:all_instances]
     if config[:all_instances][chef_server] && config[:all_instances][chef_server][:addresses]
       config[:all_instances][chef_server][:addresses].each do |address|
         # find the private IP, any old private IP will do...
         if (address.label == 'private')
-          config[:chef_server_private] = "http://#{address.address}:4000/"
+          config[:chef_server_private] = "#{address.address}"
           Logger.info "Setting the internal Chef URL to #{config[:chef_server_private]}"
         end
 
         # only set the public url if it hasn't been set in the config
         if ((config[:chef_server_public].nil? || config[:chef_server_public].empty?) && address.label == 'public')
-          config[:chef_server_public] = "http://#{address.address}:4000/"
+          config[:chef_server_public] = "#{address.address}"
           Logger.info "Setting the public Chef URL to #{config[:chef_server_public]}"
         end
       end
     end
+
+
   end
 
   def Stack.secgroup_sync(config)
@@ -774,12 +766,13 @@ cookbook_path [ '<%=config[:stackhome]%>/cookbooks' ]
           # 2) replace the tokens (CHEF_SERVER, CHEF_ENVIRONMENT, SERVER_NAME, ROLE)
           Logger.debug { "Replacing %HOSTNAME% with #{hostname} in multipart" }
           multipart.gsub!(%q!%HOSTNAME%!, hostname)
+          Logger.debug { "Replaced %HOSTNAME% with #{hostname} in multipart" }
 
           if config[:chef_server_hostname].nil?
             Logger.info  "config[:chef_server_hostname] is nil, skipping chef server substitution"
           elsif (role_details[:chef_server])
             Logger.info  "This is the Chef Server - setting up to talk to ourselves"
-            multipart.gsub!(%q!%CHEF_SERVER%!, 'http://127.0.0.1:4000/')
+            multipart.gsub!(%q!%CHEF_SERVER%!, '127.0.0.1')
             multipart.gsub!(%q!%CHEF_ENVIRONMENT%!, config[:chef_environment])
           else
             Logger.info  "Chef server is #{config[:chef_server_hostname]}, which is in #{config[:node_details][config[:chef_server_hostname]][:region]}"
@@ -792,6 +785,12 @@ cookbook_path [ '<%=config[:stackhome]%>/cookbooks' ]
               multipart.gsub!(%q!%CHEF_SERVER%!, config[:chef_server_public])
             else
               Logger.warn { "Not setting the chef url for #{hostname} as neither chef_server_private or chef_server_public are valid yet" }
+            end
+
+            if config[:domain].nil?
+              multipart.gsub!(%q!%CHEF_SERVER_HOSTNAME%!, config[:chef_server_hostname])
+            else
+              multipart.gsub!(%q!%CHEF_SERVER_HOSTNAME%!, config[:chef_server_hostname] + '.' + config[:domain])
             end
 
             multipart.gsub!(%q!%CHEF_ENVIRONMENT%!, config[:chef_environment])
@@ -915,15 +914,18 @@ cookbook_path [ '<%=config[:stackhome]%>/cookbooks' ]
       raise ArgumentError
     end
 
+    filename_fqp = ''
+
+    # Relative path, to somewhere!
     dirs = [ '.' ]  # current directory
     dirs.push(config[:stackhome])
     config[:find_file_paths].each { |fp| dirs.push(File.join(config[:stackhome], fp)) }
     dirs.push(File.join(@@gemhome, 'lib'))
+    dirs.push(ENV['HOME'])
     dirs.push('')   # find absolute paths
     dirs.flatten!
 
     Logger.debug "find_file, looking for #{filename} in #{dirs}"
-    filename_fqp = ''
     dirs.each do |dir|
       fqp = File.join(dir, filename)
       Logger.debug "find_file: checking #{fqp}"
