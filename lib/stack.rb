@@ -741,7 +741,7 @@ cookbook_path [ '<%=config[:stackhome]%>/cookbooks' ]
             # knife node create -d --environment $CHEF_ENVIRONMENT $SERVER_NAME
             # knife node run_list add -d --environment $CHEF_ENVIRONMENT $SERVER_NAME "role[${ROLE}]"
             # this relies on .chef matching the stacks config (TODO: poke the Chef API directly?)
-            cmd = "EDITOR=\"perl -p -i -e 's/_default/#{config[:chef_environment]}/'\" knife node create --server-url #{config[:chef_server_public]} #{hostname}"
+            cmd = "EDITOR=\"perl -p -i -e 's/_default/#{config[:chef_environment]}/'\" knife node create #{hostname}"
             Logger.debug cmd
             knife_node_create = Stack.shellout(config, cmd)
             Logger.info "Priming Chef Server: #{knife_node_create}"
