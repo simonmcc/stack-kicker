@@ -8,6 +8,7 @@ Gem::Specification.new do |gem|
   gem.version       = Stack::Kicker::VERSION
   gem.authors       = ["Simon McCartney"]
   gem.email         = ["simon.mccartney@hp.com"]
+  gem.licenses      = 'Apache 2.0'
   gem.description   = %q{application stack management tool for OpenStack}
   gem.summary       = %q{applicarion stack management tool for OpenStack that uses stock images & chef-server to kick the instance into shape}
   gem.homepage      = "https://github.com/simonmcc/stack-kicker"
@@ -21,5 +22,5 @@ Gem::Specification.new do |gem|
   gem.add_development_dependency('gem-release')
   gem.add_development_dependency('rake', '~> 0.9.2')
   gem.add_dependency('methadone', '~> 1.2.4')
-  gem.add_dependency('openstack', '~> 1.0.9')
+  gem.add_dependency('openstack', '~> 1.1.1')
 end
